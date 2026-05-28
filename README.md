@@ -1,13 +1,31 @@
-# OpenAI Realtime Voice Agent
+# OpenAI Realtime Voice Agent — ha-mcp + Voice PE fork
 
-Voice control system for Home Assistant using OpenAI Realtime API with ESP32/ESP32-S3 devices.
+Voice control for Home Assistant using the **OpenAI Realtime API** with
+ESP32-S3 devices.
+
+> **Fork of [`fjfricke/ha-openai-realtime`](https://github.com/fjfricke/ha-openai-realtime).**
+> Changes in this fork:
+> - Model defaults to **`gpt-realtime-2`** (configurable via `openai_model`).
+> - Home Assistant control via the unofficial
+>   **[ha-mcp](https://github.com/homeassistant-ai/ha-mcp)** server (set
+>   `ha_mcp_url` + `longlived_token`); optional `mcp_tool_allowlist` to trim
+>   ha-mcp's 80+ tools for a faster realtime session.
+> - Speaks the **`maxmaxme` `va_client` wire protocol** so it pairs with the
+>   polished Voice PE firmware at
+>   [xandervanerven/home-assistant-voice-pe](https://github.com/xandervanerven/home-assistant-voice-pe):
+>   sends `hello`/`phase`/`pong`, accepts `start`/`ping`/`interrupt`, and
+>   resamples the device's 16 kHz mic up to 24 kHz.
+> - **Handsfree barge-in**: the firmware keeps the mic open during replies; this
+>   add-on's server-VAD interrupts the response when you talk over it.
+> - Builds **locally** from the Dockerfile (no `image:` key) so the fork works
+>   without publishing to a registry.
 
 ## Components
 
 This repository contains two main components:
 
 - **Server** (`openai_realtime_voice_agent/`): Home Assistant addon that provides OpenAI Realtime API integration and WebSocket server for ESP32 devices
-- **Client** (`home-assistant-voice-pe/`): ESPHome configuration for ESP32/ESP32-S3 devices with custom WebSocket component
+- **Client** (`home-assistant-voice-pe/`): the original fjfricke ESPHome client (kept for reference). For this fork, flash the **maxmaxme-based firmware** at [xandervanerven/home-assistant-voice-pe](https://github.com/xandervanerven/home-assistant-voice-pe) instead.
 
 ## Features
 
@@ -48,12 +66,31 @@ This repository contains two main components:
 1. **Install the Server Addon**: Follow the [server documentation](openai_realtime_voice_agent/README.md)
 2. **Configure ESP32 Device**: Follow the [client documentation](home-assistant-voice-pe/README.md)
 
-## Known Issues
+## Home Assistant control via ha-mcp
 
-The endpoint `http://supervisor/core/api/mcp` is not working. You need to:
-- Create a long-lived token in Home Assistant
-- Use it in the addon configuration
-- Set the Home Assistant MCP URL to `http://localhost:8123/api/mcp` (or your Home Assistant URL). The MCP Server needs to be enabled in Home Assistant.
+This fork targets the unofficial [ha-mcp](https://github.com/homeassistant-ai/ha-mcp)
+server (far more capable than HA's built-in MCP — it can create automations,
+scripts, scenes, dashboards, query history, etc.). Configure the add-on with:
+
+- `ha_mcp_url`: ha-mcp's Streamable-HTTP endpoint, e.g.
+  `http://homeassistant.local:8086/mcp` (run ha-mcp as its own add-on/container).
+- `longlived_token`: a Home Assistant long-lived access token.
+- `mcp_tool_allowlist` (optional): comma-separated tool names to expose.
+
+To use HA's **built-in** MCP instead, leave `ha_mcp_url` blank (defaults to
+`http://supervisor/core/api/mcp`) and enable the *Model Context Protocol Server*
+integration in Home Assistant. Note the built-in `supervisor` endpoint can be
+flaky — if so, set `ha_mcp_url` to `http://homeassistant.local:8123/api/mcp` and
+provide a `longlived_token`.
+
+## Add-on install
+
+Add this repository to **Settings → Add-ons → Add-on store → ⋮ → Repositories**
+(`https://github.com/xandervanerven/ha-openai-realtime`), then install
+*OpenAI Realtime Voice Agent*. The add-on has no prebuilt `image:`, so Home
+Assistant builds it locally on first install (this can take several minutes on a
+Raspberry Pi). Advanced users can publish images via the included GitHub Actions
+workflow and re-add an `image:` key to `config.yaml` for faster installs.
 
 ## License
 

@@ -17,8 +17,13 @@ from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
 from app.raw_audio_serializer import RawAudioSerializer
 from app.session_manager import SessionManager
 from app.audio_recording_service import AudioRecordingService
+from app.phase_emitter import PhaseEmitter
 
 logger = logging.getLogger(__name__)
+
+# The OpenAI Realtime API works in 24 kHz PCM16. The Voice PE firmware plays
+# 24 kHz back, and streams 16 kHz up (resampled here by the transport).
+PIPELINE_SAMPLE_RATE = 24000
 
 
 class SessionActivityTracker(FrameProcessor):
@@ -72,11 +77,14 @@ class WebSocketHandler:
         self.port = port
         self.session_manager = session_manager
         self.audio_recording_service = audio_recording_service
-        
+
         self.transport: Optional[WebsocketServerTransport] = None
         self.pipeline: Optional[Pipeline] = None
         self.runner: Optional[PipelineRunner] = None
         self.current_task: Optional[PipelineTask] = None
+        # Connected device websockets, used to push va_client control/phase
+        # messages as TEXT frames (the audio path uses the binary serializer).
+        self._websockets: set = set()
     
     def create_transport(self) -> WebsocketServerTransport:
         """
@@ -87,9 +95,11 @@ class WebSocketHandler:
         """
         logger.info("Initializing WebSocket transport...")
         
-        # Use RawAudioSerializer for binary PCM audio
+        # Use RawAudioSerializer for binary PCM audio. It tags incoming frames
+        # with the device mic rate (16 kHz for Voice PE); the transport
+        # resamples in/out to the 24 kHz pipeline rate below.
         serializer = RawAudioSerializer()
-        
+
         # Create WebsocketServerTransport with WebsocketServerParams
         # The transport will start its own server automatically
         self.transport = WebsocketServerTransport(
@@ -99,6 +109,8 @@ class WebSocketHandler:
                 serializer=serializer,
                 audio_in_enabled=True,
                 audio_out_enabled=True,
+                audio_in_sample_rate=PIPELINE_SAMPLE_RATE,
+                audio_out_sample_rate=PIPELINE_SAMPLE_RATE,
             )
         )
         
@@ -168,12 +180,18 @@ class WebSocketHandler:
             pipeline_components.append(openai_service)
         
         pipeline_components.append(output_activity_tracker)
-        
+
+        # Emit va_client phase messages (listening/thinking/replying/idle) to
+        # the device, derived from Pipecat speaking frames as they pass
+        # downstream. Placed before transport.output() so it sees both the
+        # user (UserStarted/Stopped) and bot (BotStarted/Stopped) frames.
+        pipeline_components.append(PhaseEmitter(send_phase=self.broadcast_phase))
+
         # Add output audio recorder to capture ONLY OutputAudioRawFrame
         output_recorder = self.audio_recording_service.get_output_recorder() if self.audio_recording_service else None
         if output_recorder:
             pipeline_components.append(output_recorder)
-        
+
         pipeline_components.append(transport.output())
         
         # Add context initializer if we have cached messages
@@ -218,8 +236,25 @@ class WebSocketHandler:
         if not client_ip:
             client_ip = f"unknown_{uuid.uuid4().hex[:8]}"
             logger.warning("⚠️ Could not extract client IP, using generated ID")
-        
+
         return client_ip
+
+    async def _send_json(self, websocket, obj: dict) -> None:
+        """Send a JSON object to one device as a TEXT websocket frame."""
+        try:
+            await websocket.send(json.dumps(obj))
+        except Exception as e:
+            logger.debug(f"Could not send {obj.get('type')} to device: {e}")
+
+    async def broadcast_json(self, obj: dict) -> None:
+        """Send a JSON object to every connected device as a TEXT frame."""
+        for ws in list(self._websockets):
+            await self._send_json(ws, obj)
+
+    async def broadcast_phase(self, value: str) -> None:
+        """Send a va_client phase message to every connected device."""
+        logger.debug(f"➡️ phase: {value}")
+        await self.broadcast_json({"type": "phase", "value": value})
     
     def setup_event_handlers(
         self,
@@ -242,15 +277,22 @@ class WebSocketHandler:
             """Handle new WebSocket client connection."""
             client_id = self.extract_client_id(websocket)
             logger.info(f"🔗 New WebSocket connection from IP: {client_id}")
+            # Track the raw connection so we can push phase/control TEXT frames.
+            self._websockets.add(websocket)
+            # Handshake ack expected by the va_client protocol (server -> device
+            # "hello"). The Voice PE firmware tolerates its absence, but sending
+            # it keeps both sides in lockstep with the documented protocol.
+            await self._send_json(websocket, {"type": "hello", "audio_out": "pcm"})
             await on_client_connected_callback(client_id)
-        
-        if on_client_disconnected_callback:
-            @transport.event_handler("on_client_disconnected")
-            async def on_client_disconnected(transport: WebsocketServerTransport, websocket, *args, **kwargs):
-                """Handle client disconnection."""
-                client_id = self.extract_client_id(websocket)
-                if client_id:
-                    logger.info(f"🔌 Client {client_id} disconnected")
+
+        @transport.event_handler("on_client_disconnected")
+        async def on_client_disconnected(transport: WebsocketServerTransport, websocket, *args, **kwargs):
+            """Handle client disconnection."""
+            self._websockets.discard(websocket)
+            client_id = self.extract_client_id(websocket)
+            if client_id:
+                logger.info(f"🔌 Client {client_id} disconnected")
+                if on_client_disconnected_callback:
                     on_client_disconnected_callback(client_id)
         
         # Handle text messages from client (e.g., interrupt messages)
@@ -300,6 +342,14 @@ class WebSocketHandler:
                                 logger.error(f"❌ Error sending interrupt to OpenAI service: {e}", exc_info=True)
                         else:
                             logger.warning(f"⚠️ No OpenAI service found for client {client_id}, cannot send interrupt")
+                    elif message_type == "start":
+                        # va_client sends {"type":"start"} on connect. The
+                        # pipeline already streams continuously with server VAD,
+                        # so there's nothing to start here — just acknowledge.
+                        logger.debug(f"▶️ start from client {client_id}")
+                    elif message_type == "ping":
+                        # Keepalive. Reply with pong on the same connection.
+                        await self._send_json(websocket, {"type": "pong"})
                     else:
                         logger.debug(f"📨 Received message from client {client_id}: {message_type}")
                         

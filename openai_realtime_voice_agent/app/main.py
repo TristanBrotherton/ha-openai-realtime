@@ -61,6 +61,15 @@ class Application:
         
         # Get instructions with default
         instructions = os.environ.get("INSTRUCTIONS", "You are the Home Assistant Voice Agent and can control the Smart Home.")
+
+        # OpenAI Realtime model + voice. Defaults to gpt-realtime-2 (this fork's
+        # target); fall back to "gpt-realtime" if the API rejects it.
+        openai_model = os.environ.get("OPENAI_MODEL", "gpt-realtime-2")
+        openai_voice = os.environ.get("OPENAI_VOICE", "marin")
+
+        # Optional allow-list to trim the (large) ha-mcp tool set exposed to the
+        # model. Comma-separated tool names; empty means expose all.
+        mcp_tool_allowlist = [t.strip() for t in os.environ.get("MCP_TOOL_ALLOWLIST", "").split(",") if t.strip()]
         
         # Get recording setting (optional, defaults to false)
         enable_recording = os.environ.get("ENABLE_RECORDING", "false").lower() == "true"
@@ -103,6 +112,9 @@ class Application:
         self.vad_prefix_padding_ms = vad_prefix_padding_ms
         self.vad_silence_duration_ms = vad_silence_duration_ms
         self.instructions = instructions
+        self.model = openai_model
+        self.voice = openai_voice
+        self.mcp_tool_allowlist = mcp_tool_allowlist
         self.mcp_client = mcp_client
         
         # Initialize audio recording service (optional)
@@ -188,8 +200,13 @@ class Application:
                     logger.info("🔧 Fetching MCP tool definitions...")
                     mcp_tools_schema = await self.mcp_client.get_tools_schema()
                     
-                    # Convert MCP tool schemas to OpenAI format
+                    # Convert MCP tool schemas to OpenAI format, applying the
+                    # optional allow-list so the realtime session isn't flooded
+                    # with ha-mcp's 80+ tools.
+                    exposed = 0
                     for function_schema in mcp_tools_schema.standard_tools:
+                        if self.mcp_tool_allowlist and function_schema.name not in self.mcp_tool_allowlist:
+                            continue
                         openai_tool = {
                             "type": "function",
                             "name": function_schema.name,
@@ -201,8 +218,12 @@ class Application:
                             }
                         }
                         all_tools.append(openai_tool)
-                    
-                    logger.info(f"✅ Fetched {len(mcp_tools_schema.standard_tools)} MCP tools")
+                        exposed += 1
+
+                    if self.mcp_tool_allowlist:
+                        logger.info(f"✅ Fetched {len(mcp_tools_schema.standard_tools)} MCP tools, exposing {exposed} per allow-list")
+                    else:
+                        logger.info(f"✅ Fetched {len(mcp_tools_schema.standard_tools)} MCP tools")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to fetch MCP tool definitions: {e}")
             
@@ -217,7 +238,7 @@ class Application:
                             silence_duration_ms=self.vad_silence_duration_ms
                         )
                     ),
-                    output=AudioOutput(voice="marin")
+                    output=AudioOutput(voice=self.voice)
                 ),
                 tools=all_tools
             )
@@ -227,7 +248,7 @@ class Application:
             # Create new service instance
             self.openai_service = OpenAIRealtimeLLMService(
                 api_key=self.openai_api_key,
-                model="gpt-realtime",
+                model=self.model,
                 session_properties=session_properties,
                 start_audio_paused=False
             )

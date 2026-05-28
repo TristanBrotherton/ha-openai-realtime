@@ -3,9 +3,13 @@ set -e
 
 # Get configuration
 OPENAI_API_KEY=$(bashio::config 'openai_api_key')
+OPENAI_MODEL=$(bashio::config 'openai_model')
+OPENAI_VOICE=$(bashio::config 'openai_voice')
 WEBSOCKET_PORT=$(bashio::config 'websocket_port')
+DEVICE_INPUT_SAMPLE_RATE=$(bashio::config 'device_input_sample_rate')
 HA_MCP_URL=$(bashio::config 'ha_mcp_url')
 LONGLIVED_TOKEN=$(bashio::config 'longlived_token')
+MCP_TOOL_ALLOWLIST=$(bashio::config 'mcp_tool_allowlist')
 
 # Get turn detection settings
 VAD_THRESHOLD=$(bashio::config 'vad_threshold')
@@ -29,8 +33,12 @@ fi
 
 # Export environment variables
 export OPENAI_API_KEY
+export OPENAI_MODEL
+export OPENAI_VOICE
 export WEBSOCKET_PORT
+export DEVICE_INPUT_SAMPLE_RATE
 export LONGLIVED_TOKEN
+export MCP_TOOL_ALLOWLIST
 
 # Export turn detection settings
 export VAD_THRESHOLD

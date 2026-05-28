@@ -1,5 +1,5 @@
 name: OpenAI Realtime Voice Agent
-version: "0.1.0"
+version: "0.2.0"
 slug: openai_realtime_voice_agent
 description: Voice control using OpenAI Realtime API with WebSocket support for ESP32 devices
 url: https://github.com/fjfricke/ha-openai-realtime
@@ -10,12 +10,35 @@ init: false
 startup: application
 boot: auto
 host_network: true
+# Gives the add-on SUPERVISOR_TOKEN so it can reach Home Assistant (used as a
+# fallback auth token for the MCP server when longlived_token is left blank).
+homeassistant_api: true
 options:
   openai_api_key: ""
+  # OpenAI Realtime model. Defaults to gpt-realtime-2 (this fork's target). If
+  # the API rejects it, fall back to "gpt-realtime".
+  openai_model: "gpt-realtime-2"
+  openai_voice: "marin"
   websocket_port: 8080
+  # PCM sample rate (Hz) the device microphone streams in. The Home Assistant
+  # Voice PE firmware (va_client) sends 16000; the backend resamples to the
+  # 24000 OpenAI requires. Only change if you flash a device that sends a
+  # different rate.
+  device_input_sample_rate: 16000
+  # MCP server for Home Assistant control. For the unofficial homeassistant-ai/
+  # ha-mcp server set its Streamable-HTTP endpoint, e.g.
+  # "http://homeassistant.local:8086/mcp". Leave blank to use HA's built-in MCP
+  # at http://supervisor/core/api/mcp.
   ha_mcp_url: ""
+  # Long-lived Home Assistant access token for the MCP server. Leave blank to
+  # use the add-on's supervisor token (built-in MCP only).
   longlived_token: ""
-  # Turn detection settings
+  # Optional comma-separated allow-list of MCP tool names to expose to the
+  # model. ha-mcp ships 80+ tools; trimming the set keeps the realtime session
+  # fast and focused. Leave blank to expose all tools.
+  mcp_tool_allowlist: ""
+  # Turn detection settings (server-side VAD). A higher threshold reduces false
+  # barge-ins from speaker->mic echo when handsfree barge-in is enabled.
   vad_threshold: 0.5
   vad_prefix_padding_ms: 300
   vad_silence_duration_ms: 500
@@ -27,13 +50,21 @@ options:
   enable_recording: false
 schema:
   openai_api_key: password
+  openai_model: str
+  openai_voice: str
   websocket_port: int(1024,65535)
+  device_input_sample_rate: int(8000,48000)
   ha_mcp_url: str
   longlived_token: password
+  mcp_tool_allowlist: str
   vad_threshold: float(0.0,1.0)
   vad_prefix_padding_ms: int
   vad_silence_duration_ms: int
   instructions: str
   session_reuse_timeout_seconds: int(0,3600)  # bis 1 Stunde
   enable_recording: bool
-image: ghcr.io/fjfricke/ha-openai-realtime/openai-realtime-voice-agent-{arch}
+# No `image:` key -> Home Assistant builds the add-on locally from the
+# Dockerfile in this directory (see build.yaml). This makes the fork work
+# without publishing images to a registry. Advanced users who prefer fast
+# installs can publish via the included GitHub Actions workflow and set:
+#   image: ghcr.io/<your-gh-user>/ha-openai-realtime/openai-realtime-voice-agent-{arch}
