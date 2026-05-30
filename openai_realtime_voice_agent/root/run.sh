@@ -18,6 +18,7 @@ VAD_SILENCE_DURATION_MS=$(bashio::config 'vad_silence_duration_ms')
 TURN_DETECTION_TYPE=$(bashio::config 'turn_detection_type')
 VAD_EAGERNESS=$(bashio::config 'vad_eagerness')
 SEMANTIC_VAD_CREATE_RESPONSE=$(bashio::config 'semantic_vad_create_response')
+ENABLE_DISCONNECT_TOOL=$(bashio::config 'enable_disconnect_tool')
 INTERRUPT_RESPONSE=$(bashio::config 'interrupt_response')
 TRANSCRIPTION_LANGUAGE=$(bashio::config 'transcription_language')
 PHASE_IDLE_DEBOUNCE_MS=$(bashio::config 'phase_idle_debounce_ms')
@@ -53,6 +54,7 @@ export VAD_SILENCE_DURATION_MS
 export TURN_DETECTION_TYPE
 export VAD_EAGERNESS
 export SEMANTIC_VAD_CREATE_RESPONSE
+export ENABLE_DISCONNECT_TOOL
 export INTERRUPT_RESPONSE
 export TRANSCRIPTION_LANGUAGE
 export PHASE_IDLE_DEBOUNCE_MS

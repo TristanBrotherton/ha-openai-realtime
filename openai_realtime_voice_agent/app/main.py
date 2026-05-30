@@ -87,6 +87,13 @@ class Application:
         # server makes it. FALSE reproduces the old single-turn-only behaviour
         # (turn 1 answers, turn 2 hangs in "thinking"). See _ensure_openai_service.
         semantic_vad_create_response = os.environ.get("SEMANTIC_VAD_CREATE_RESPONSE", "true").strip().lower() == "true"
+        # Expose the `disconnect_client` tool to the model. DEFAULT FALSE: on the
+        # Voice PE the device owns its own session lifecycle (wake word starts a
+        # turn, the no-speech watchdog / idle phase ends it), so a model-driven
+        # disconnect just tears down the persistent WebSocket mid-conversation —
+        # it was seen closing the socket DURING the first reply ("conversation_ended").
+        # Only enable if your device relies on the backend to hang up.
+        enable_disconnect_tool = os.environ.get("ENABLE_DISCONNECT_TOOL", "false").strip().lower() == "true"
         # Pin the input-transcription language (ISO code, e.g. "nl"). Empty = let
         # the model auto-detect. Helps stop the model drifting to another
         # language; pair it with an explicit language lock in `instructions`.
@@ -148,6 +155,7 @@ class Application:
         self.vad_eagerness = vad_eagerness
         self.interrupt_response = interrupt_response
         self.semantic_vad_create_response = semantic_vad_create_response
+        self.enable_disconnect_tool = enable_disconnect_tool
         self.transcription_language = transcription_language
         self.instructions = instructions
         self.model = openai_model
@@ -227,11 +235,13 @@ class Application:
                 InputAudioTranscription,
             )
             
-            # Create disconnect tool definition
-            disconnect_tool_def = get_disconnect_tool_definition()
-            
-            # Collect all tool definitions for session properties
-            all_tools = [disconnect_tool_def]
+            # Collect all tool definitions for session properties. The
+            # disconnect_client tool is opt-in (see enable_disconnect_tool): by
+            # default we do NOT expose it, so the model can't hang up the device
+            # mid-conversation.
+            all_tools = []
+            if self.enable_disconnect_tool:
+                all_tools.append(get_disconnect_tool_definition())
             
             # Get MCP tool definitions if available
             mcp_tools_schema = None
@@ -346,10 +356,11 @@ class Application:
             )
             logger.info(f"✅ OpenAI Service created: {type(self.openai_service).__name__}")
             
-            # Register disconnect tool handler
-            disconnect_tool_handler = create_disconnect_tool_handler(self.websocket_transport)
-            self.openai_service.register_function("disconnect_client", disconnect_tool_handler)
-            logger.info("✅ Registered disconnect tool handler")
+            # Register disconnect tool handler (only when the tool is exposed)
+            if self.enable_disconnect_tool:
+                disconnect_tool_handler = create_disconnect_tool_handler(self.websocket_transport)
+                self.openai_service.register_function("disconnect_client", disconnect_tool_handler)
+                logger.info("✅ Registered disconnect tool handler")
             
             # Register MCP tool handlers if available
             if self.mcp_client and mcp_tools_schema:

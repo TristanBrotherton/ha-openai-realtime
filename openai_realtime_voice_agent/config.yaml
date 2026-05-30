@@ -1,5 +1,5 @@
 name: OpenAI Realtime Voice Agent
-version: "0.3.7"
+version: "0.3.8"
 slug: openai_realtime_voice_agent
 description: Voice control using OpenAI Realtime API with WebSocket support for ESP32 devices
 url: https://github.com/fjfricke/ha-openai-realtime
@@ -63,6 +63,12 @@ options:
   # "thinking" (turn 1 answers, then nothing). Leave true unless you specifically
   # want single-turn-only behaviour.
   semantic_vad_create_response: true
+  # Expose the `disconnect_client` tool to the model. FALSE (default): the Voice
+  # PE manages its own session (wake word + no-speech watchdog), so a model
+  # disconnect just tears down the WebSocket mid-conversation — it was caught
+  # closing the socket during the very first reply. Only enable if your device
+  # depends on the backend to hang up.
+  enable_disconnect_tool: false
   # Allow user speech to interrupt the assistant mid-reply (handsfree barge-in).
   # Default false: with imperfect device-side echo cancellation, the bot's own
   # audio can be heard as "speech" and cut the reply short. Interrupt with the
@@ -99,6 +105,7 @@ schema:
   turn_detection_type: "list(semantic_vad|server_vad)"
   vad_eagerness: "list(low|medium|high|auto)"
   semantic_vad_create_response: bool
+  enable_disconnect_tool: bool
   interrupt_response: bool
   transcription_language: str?
   phase_idle_debounce_ms: int(0,10000)
