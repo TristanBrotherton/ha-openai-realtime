@@ -240,12 +240,19 @@ class WebSocketHandler:
         return client_ip
 
     async def _send_json(self, websocket, obj: dict) -> None:
-        """Send a JSON object to one device as a TEXT websocket frame."""
+        """Send a JSON object to one device as a TEXT websocket frame.
+
+        IMPORTANT: use COMPACT separators (no space after ':' or ','). The Voice
+        PE va_client does a literal substring match on `"value":"<phase>"`
+        (va_client.cpp handle_text_), so the default json.dumps output
+        `"value": "listening"` (with a space) would NOT match and the device
+        would silently ignore every phase. Compact output `"value":"listening"`
+        matches. This is what made listening/thinking/replying never reach the
+        device (LED stuck idle, no-speech watchdog never cancelled).
+        """
         try:
-            await websocket.send(json.dumps(obj))
+            await websocket.send(json.dumps(obj, separators=(",", ":")))
         except Exception as e:
-            # TEMP instrumentation: surface send failures (was debug) so we can
-            # see if phase TEXT frames fail to reach the device.
             logger.warning(f"⚠️ Could not send {obj.get('type')} to device: {e!r}")
 
     async def broadcast_json(self, obj: dict) -> None:
