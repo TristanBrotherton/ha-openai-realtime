@@ -239,20 +239,26 @@ class WebSocketHandler:
         if input_recorder:
             pipeline_components.append(input_recorder)
         
-        # Continue with rest of pipeline
+        # Continue with rest of pipeline, with transcript-logging taps. The
+        # assistant reply text (TTSTextFrame) flows DOWNSTREAM out of the LLM
+        # while the user's TranscriptionFrame is pushed UPSTREAM (so the user
+        # aggregator can consume it) — opposite directions, so they need taps on
+        # opposite sides of the service (see transcript_logger.py): "user" before
+        # the LLM, "assistant" after it.
         if context_aggregator:
             pipeline_components.extend([
                 context_aggregator.user(),
+                TranscriptLogger(capture="user"),
                 openai_service,
+                TranscriptLogger(capture="assistant"),
                 context_aggregator.assistant(),
             ])
         else:
-            pipeline_components.append(openai_service)
-
-        # Log the spoken transcript (assistant reply text + user transcript when
-        # available) to the add-on log. Placed right after the OpenAI service, on
-        # the downstream path where LLMTextFrame / TranscriptionFrame flow out.
-        pipeline_components.append(TranscriptLogger())
+            pipeline_components.extend([
+                TranscriptLogger(capture="user"),
+                openai_service,
+                TranscriptLogger(capture="assistant"),
+            ])
 
         pipeline_components.append(output_activity_tracker)
 
