@@ -31,6 +31,31 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 dotenv.load_dotenv()
 
 
+class SafeRealtimeLLMService(OpenAIRealtimeLLMService):
+    """OpenAIRealtimeLLMService with audio-truncation-on-interruption disabled.
+
+    pipecat's `_truncate_current_audio_response()` (called by `_handle_interruption`
+    on EVERY interruption — both our device "stop" AND pipecat's own server-VAD
+    barge-in when the user wakes/speaks mid-reply) sends a
+    `conversation.item.truncate` with `audio_end_ms = wall-clock ms since audio
+    start`. But OpenAI BURSTS the reply faster than real-time, so that elapsed
+    value massively overshoots the audio that actually exists, and OpenAI rejects
+    it with `invalid_request_error("Audio content of N ms is already shorter than
+    M ms")`. That errored truncate wedges the realtime session, so the user's very
+    next turn gets NO response — the recurring "interrupt, then immediately ask
+    again → silence" bug (confirmed in logs: session goes quiet right after
+    `_truncate_current_audio_response`).
+
+    The device stops playback authoritatively on its own, so server-side
+    truncation buys us nothing. No-op it. (Cost: OpenAI's conversation history
+    keeps the full assistant text the user may not have fully heard — purely
+    cosmetic for context.)
+    """
+
+    async def _truncate_current_audio_response(self):  # type: ignore[override]
+        return
+
+
 class Application:
     """Main application class using Pipecat."""
     
