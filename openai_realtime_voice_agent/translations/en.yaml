@@ -1,0 +1,138 @@
+configuration:
+  openai_api_key:
+    name: OpenAI API key
+    description: >-
+      Your OpenAI API key (starts with sk-...). Required. The add-on uses it to
+      open the Realtime session that does all the speech + reasoning.
+  openai_model:
+    name: OpenAI model
+    description: >-
+      Realtime model to use. Default gpt-realtime-2. If the API rejects it,
+      fall back to "gpt-realtime".
+  openai_voice:
+    name: Assistant voice
+    description: >-
+      The voice the assistant speaks with (e.g. marin, alloy, echo). Voices
+      depend on the model.
+  websocket_port:
+    name: WebSocket port
+    description: >-
+      Port the device connects to over plain WebSocket. Must match the URL
+      flashed on the Voice PE (default 8080). Only change if it clashes.
+  device_input_sample_rate:
+    name: Device mic sample rate (Hz)
+    description: >-
+      Sample rate the device microphone streams at. The Voice PE firmware sends
+      16000; the add-on resamples to the 24000 OpenAI needs. Only change if you
+      flash a device that sends a different rate.
+  ha_mcp_url:
+    name: Home Assistant MCP URL
+    description: >-
+      Endpoint of the MCP server used for Home Assistant control. For the
+      homeassistant-ai/ha-mcp add-on, its Streamable-HTTP URL (e.g.
+      http://homeassistant.local:8086/mcp). Leave blank to use HA's built-in MCP.
+  longlived_token:
+    name: Home Assistant token
+    description: >-
+      Long-lived access token for the MCP server. Leave blank to use the add-on's
+      own supervisor token (built-in MCP only).
+  mcp_tool_allowlist:
+    name: MCP tool allow-list
+    description: >-
+      Comma-separated list of MCP tool names to expose to the model. ha-mcp ships
+      80+ tools; trimming the set keeps the session fast and focused. Blank =
+      expose all.
+  vad_threshold:
+    name: VAD threshold (server_vad)
+    description: >-
+      How loud speech must be to count as a turn (0.0–1.0). Higher = fewer false
+      triggers from echo/noise. Only used when Turn detection = server_vad.
+  vad_prefix_padding_ms:
+    name: VAD prefix padding (ms)
+    description: >-
+      How much audio before detected speech to keep, so the first word isn't
+      clipped (server_vad only).
+  vad_silence_duration_ms:
+    name: VAD silence to end turn (ms)
+    description: >-
+      How long a silence ends your turn (server_vad only). 800 leaves room to
+      pause briefly; raise toward 1000–1200 if it cuts you off, lower if replies
+      feel sluggish.
+  turn_detection_type:
+    name: Turn detection mode
+    description: >-
+      How the end of your turn is detected. "semantic_vad" (recommended) detects
+      a natural end-of-utterance, is echo-resistant, and doesn't cut you off on a
+      pause. "server_vad" is classic silence-based detection (uses the vad_*
+      values).
+  vad_eagerness:
+    name: Semantic VAD eagerness
+    description: >-
+      semantic_vad only: how eager to end your turn. "low" waits longest (fewest
+      mid-sentence cut-offs). low | medium | high | auto.
+  semantic_vad_create_response:
+    name: Server creates each response
+    description: >-
+      semantic_vad only. ON (recommended): the server replies on every detected
+      end-of-turn — REQUIRED for multi-turn (with it off, the 2nd question hangs
+      forever in "thinking"). Leave on unless you specifically want single-turn.
+  enable_disconnect_tool:
+    name: Allow model to hang up
+    description: >-
+      Expose the disconnect tool to the model. OFF (recommended): the Voice PE
+      manages its own session, so a model-driven disconnect just tears down the
+      connection mid-conversation. Only enable if your device relies on it.
+  interrupt_response:
+    name: Handsfree barge-in
+    description: >-
+      Let your speech interrupt the assistant mid-reply. OFF (recommended): with
+      imperfect echo cancellation the bot's own audio can be heard as speech and
+      cut the reply short. Interrupt with the "stop" word / center button instead.
+  transcription_language:
+    name: Transcription language
+    description: >-
+      Pin the language (ISO code, e.g. "nl"). Blank = auto-detect. Stops the
+      model drifting between languages. NOTE: this also turns the user-speech
+      transcript (the 🗣️ user line in the log) on/off.
+  transcription_model:
+    name: Transcription model
+    description: >-
+      Model that turns your speech into the side-channel TEXT transcript (NOT how
+      the assistant understands you — it hears the audio natively). Only used when
+      a transcription language is set. gpt-4o-transcribe (default) /
+      gpt-4o-mini-transcribe / whisper-1 / gpt-realtime-whisper.
+  phase_idle_debounce_ms:
+    name: Idle debounce (ms)
+    description: >-
+      How long the bot must stay silent after a reply before the device returns
+      to idle. Bridges the gaps between TTS sentences / tool-calls so the LED ring
+      and the "stop" word stay active for the whole answer.
+  follow_up_listen_seconds:
+    name: Follow-up listen window (s)
+    description: >-
+      Seconds the device keeps the mic open after the assistant finishes, so you
+      can answer back WITHOUT re-saying the wake word. The ring turns to the
+      listening colour while it waits. 0 = off (say the wake word every turn).
+      Needs firmware that supports it.
+  follow_up_open_delay_ms:
+    name: Follow-up open delay (ms)
+    description: >-
+      Milliseconds the device waits after a reply finishes before opening that
+      follow-up mic, bridging the speaker's hardware tail so it doesn't "hear
+      itself". Lower = the listening ring appears sooner; raise it if the device
+      starts hearing itself / echoes after a reply. 200 is a good start.
+  instructions:
+    name: System instructions
+    description: >-
+      The assistant's system prompt. For non-English, lock the language here,
+      e.g. "Spreek en versta UITSLUITEND Nederlands. Wissel nooit van taal."
+  session_reuse_timeout_seconds:
+    name: Session reuse timeout (s)
+    description: >-
+      How long a disconnected client's conversation context is kept so a quick
+      reconnect resumes the same session. 0–3600.
+  enable_recording:
+    name: Record audio (debug)
+    description: >-
+      Save the input/output audio to files for debugging. Off by default.
+network: {}

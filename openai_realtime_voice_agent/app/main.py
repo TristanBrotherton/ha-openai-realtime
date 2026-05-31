@@ -134,6 +134,14 @@ class Application:
             follow_up_listen_seconds = 8
         follow_up_listen_seconds = max(0, min(60, follow_up_listen_seconds))
         follow_up_ms = follow_up_listen_seconds * 1000
+        # Delay (ms) before the follow-up mic opens, bridging the device speaker's
+        # hardware tail so the mic doesn't catch the reply's own end. Sent to the
+        # device in `hello`; lower = snappier, higher = safer against echo.
+        try:
+            follow_up_open_delay_ms = int(os.environ.get("FOLLOW_UP_OPEN_DELAY_MS", "200"))
+        except (TypeError, ValueError):
+            follow_up_open_delay_ms = 200
+        follow_up_open_delay_ms = max(0, min(5000, follow_up_open_delay_ms))
 
         # Get session reuse timeout and initialize session manager
         session_reuse_timeout = float(os.environ.get("SESSION_REUSE_TIMEOUT_SECONDS", "300"))
@@ -165,10 +173,12 @@ class Application:
             session_manager=self.session_manager,
             audio_recording_service=self.audio_recording_service,
             follow_up_ms=follow_up_ms,
+            follow_up_open_delay_ms=follow_up_open_delay_ms,
         )
         logger.info(
             f"🔁 Follow-up window: {follow_up_listen_seconds}s "
-            f"({'enabled' if follow_up_ms > 0 else 'disabled — turn-based'})"
+            f"({'enabled' if follow_up_ms > 0 else 'disabled — turn-based'}), "
+            f"mic-open delay {follow_up_open_delay_ms}ms"
         )
         self.websocket_transport = self.websocket_handler.create_transport()
         

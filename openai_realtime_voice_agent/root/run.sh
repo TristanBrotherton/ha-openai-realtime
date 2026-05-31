@@ -24,6 +24,7 @@ TRANSCRIPTION_LANGUAGE=$(bashio::config 'transcription_language')
 TRANSCRIPTION_MODEL=$(bashio::config 'transcription_model')
 PHASE_IDLE_DEBOUNCE_MS=$(bashio::config 'phase_idle_debounce_ms')
 FOLLOW_UP_LISTEN_SECONDS=$(bashio::config 'follow_up_listen_seconds')
+FOLLOW_UP_OPEN_DELAY_MS=$(bashio::config 'follow_up_open_delay_ms')
 
 # Get instructions
 INSTRUCTIONS=$(bashio::config 'instructions')
@@ -62,6 +63,7 @@ export TRANSCRIPTION_LANGUAGE
 export TRANSCRIPTION_MODEL
 export PHASE_IDLE_DEBOUNCE_MS
 export FOLLOW_UP_LISTEN_SECONDS
+export FOLLOW_UP_OPEN_DELAY_MS
 
 # Export instructions
 export INSTRUCTIONS

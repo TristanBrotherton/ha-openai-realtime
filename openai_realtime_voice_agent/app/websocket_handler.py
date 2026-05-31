@@ -120,6 +120,7 @@ class WebSocketHandler:
         session_manager: Optional[SessionManager] = None,
         audio_recording_service: Optional[AudioRecordingService] = None,
         follow_up_ms: int = 0,
+        follow_up_open_delay_ms: int = 1500,
     ):
         """
         Initialize WebSocket handler.
@@ -132,12 +133,16 @@ class WebSocketHandler:
             follow_up_ms: How long (ms) the device should keep the mic open
                 after a reply so the user can answer without a wake word. Sent to
                 the device in the `hello` handshake. 0 = turn-based (no window).
+            follow_up_open_delay_ms: How long (ms) the device waits after a reply
+                finishes before opening that follow-up mic (bridges the speaker
+                hardware tail). Sent in the `hello` handshake.
         """
         self.host = host
         self.port = port
         self.session_manager = session_manager
         self.audio_recording_service = audio_recording_service
         self.follow_up_ms = max(0, int(follow_up_ms))
+        self.follow_up_open_delay_ms = max(0, int(follow_up_open_delay_ms))
 
         self.transport: Optional[WebsocketServerTransport] = None
         self.pipeline: Optional[Pipeline] = None
@@ -405,7 +410,12 @@ class WebSocketHandler:
             # every connect so an add-on config change takes effect on reconnect.
             await self._send_json(
                 websocket,
-                {"type": "hello", "audio_out": "pcm", "follow_up_ms": self.follow_up_ms},
+                {
+                    "type": "hello",
+                    "audio_out": "pcm",
+                    "follow_up_ms": self.follow_up_ms,
+                    "follow_up_open_delay_ms": self.follow_up_open_delay_ms,
+                },
             )
             await on_client_connected_callback(client_id)
 

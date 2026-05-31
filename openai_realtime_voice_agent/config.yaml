@@ -1,5 +1,5 @@
 name: OpenAI Realtime Voice Agent
-version: "0.4.7"
+version: "0.4.8"
 slug: openai_realtime_voice_agent
 description: Voice control using OpenAI Realtime API with WebSocket support for ESP32 devices
 url: https://github.com/fjfricke/ha-openai-realtime
@@ -95,11 +95,17 @@ options:
   # LED ring turns to the listening colour while it waits; if you don't speak
   # within the window it returns to idle. 0 = off (turn-based: say the wake word
   # for every turn). The value is sent to the device in the handshake, so you
-  # can tune it here and just restart the add-on — no reflash. The window only
-  # opens ~1.5 s after the reply's audio has fully played out, so the device
-  # doesn't hear the tail of its own speech. Requires firmware that supports it
-  # (va_client follow_up_ms); older firmware ignores it.
+  # can tune it here and just restart the add-on — no reflash. Requires firmware
+  # that supports it (va_client follow_up_ms); older firmware ignores it.
   follow_up_listen_seconds: 8
+  # Milliseconds the device waits AFTER a reply has finished playing before it
+  # opens the follow-up mic (above). This bridges the speaker's hardware tail
+  # (i2s buffer + DAC) so the mic doesn't catch the very end of the assistant's
+  # own speech and false-trigger. Lower = the listening ring appears sooner /
+  # snappier; raise it if, after a reply, the device starts "hearing itself"
+  # (a spurious turn) or echoes. 200 is a good start; try 0 only if your audio
+  # tail is truly gone by the time the reply ends. Sent in the handshake too.
+  follow_up_open_delay_ms: 200
   # OpenAI instructions. For non-English, lock the language explicitly, e.g.:
   #   "Je bent de Home Assistant spraakassistent en bestuurt het smart home.
   #    Spreek en versta UITSLUITEND Nederlands. Wissel nooit van taal."
@@ -129,6 +135,7 @@ schema:
   transcription_model: str
   phase_idle_debounce_ms: int(0,10000)
   follow_up_listen_seconds: int(0,60)
+  follow_up_open_delay_ms: int(0,5000)
   instructions: str
   session_reuse_timeout_seconds: int(0,3600)  # bis 1 Stunde
   enable_recording: bool
