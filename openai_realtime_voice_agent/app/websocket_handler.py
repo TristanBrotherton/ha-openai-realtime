@@ -135,7 +135,9 @@ class ConnectionRecovery(FrameProcessor):
     """
 
     # Substrings that mark a dead/closed OpenAI websocket (vs an app-level error
-    # like a tool failure, which we must NOT reconnect on).
+    # like a tool failure, which we must NOT reconnect on). These appear on the
+    # SEND-side flood ("Error sending client event: …"), so they're paired with
+    # the "client event" check below to avoid reacting to a device disconnect.
     _DEATH_MARKERS = (
         "keepalive ping timeout",
         "going away",
@@ -145,6 +147,18 @@ class ConnectionRecovery(FrameProcessor):
         "sent 1011",
         "sent 1001",
         "1006",
+    )
+    # Substrings that UNAMBIGUOUSLY mean OUR OpenAI session is gone and must be
+    # reconnected, regardless of how the error surfaced. The 60-minute cap can
+    # arrive as a proactive OpenAI *error event* (code='session_expired', "Your
+    # session hit the maximum duration of 60 minutes.") with NO "client event"
+    # send-flood and NO close-code marker — so the paired check above misses it
+    # and the session stays dead until the add-on restarts. These markers force a
+    # reconnect on their own. They can only come from OpenAI (not a device close),
+    # so no "client event" guard is needed.
+    _SESSION_DEAD_MARKERS = (
+        "session_expired",
+        "maximum duration",
     )
     RECONNECT_COOLDOWN_S = 5.0
     IDLE_UNSTICK_COOLDOWN_S = 2.0
@@ -161,13 +175,19 @@ class ConnectionRecovery(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, ErrorFrame) and not self._reconnecting:
             msg = str(getattr(frame, "error", "") or "")
-            # Only the OpenAI send-side flood ("Error sending client event: …")
-            # means OUR OpenAI WS died. A DEVICE-side disconnect also closes with
-            # 1011/ConnectionClosed but is normal (the device went away) and must
-            # NOT trigger an OpenAI reconnect — so require the client-event
-            # signature in ADDITION to a connection-death marker. Covers both the
-            # 1011 keepalive timeout and the 1001 "going away" 60-minute cap.
-            if "client event" in msg and any(m in msg for m in self._DEATH_MARKERS):
+            # Two reconnect triggers:
+            #  (a) the OpenAI send-side flood ("Error sending client event: …" +
+            #      a close-code marker) — OUR WS died mid-send. We require the
+            #      "client event" signature so a normal DEVICE-side disconnect
+            #      (also 1011/ConnectionClosed, but the device went away) does NOT
+            #      trigger an OpenAI reconnect.
+            #  (b) an unambiguous OpenAI session-dead error event (session_expired
+            #      / "maximum duration") — this is the 60-min cap surfacing as a
+            #      proactive error event with NO send-flood, so (a) misses it.
+            #      It can only come from OpenAI, so it needs no "client event" guard.
+            send_flood = "client event" in msg and any(m in msg for m in self._DEATH_MARKERS)
+            session_dead = any(m in msg for m in self._SESSION_DEAD_MARKERS)
+            if send_flood or session_dead:
                 now = time.monotonic()
                 if now - self._last_attempt >= self.RECONNECT_COOLDOWN_S:
                     self._reconnecting = True
