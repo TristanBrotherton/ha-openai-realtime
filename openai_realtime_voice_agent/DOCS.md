@@ -1,0 +1,139 @@
+# OpenAI Realtime 2 Voice Agent — Documentation
+
+This add-on runs an **OpenAI `gpt-realtime-2`** voice session and bridges it to Home
+Assistant control and web search. It is the backend half of a two-part project; the
+front half is custom **firmware for the Home Assistant Voice PE** device (see
+[Firmware](#firmware-home-assistant-voice-pe-only) below).
+
+```
+Voice PE device  ──WebSocket──▶  this add-on  ──▶  OpenAI Realtime API
+(mic up / speaker down)               │  tools
+                                       ▼
+                              HA MCP Server (/api/mcp)  → controls your home
+```
+
+---
+
+## 1. Install the add-on
+
+1. In Home Assistant go to **Settings → Add-ons → Add-on Store**.
+2. Top-right **⋮ → Repositories**, add:
+   `https://github.com/xandervanerven/ha-openai-realtime`
+3. Find **OpenAI Realtime 2 Voice Agent** in the store and click **Install**.
+   (There is no prebuilt image — Home Assistant builds it locally the first time,
+   which takes a few minutes.)
+4. Open the add-on's **Configuration** tab to set it up (next sections).
+
+## 2. Get an OpenAI API key
+
+1. Go to <https://platform.openai.com/> → **API keys** → **Create new secret key**.
+2. Make sure **billing** is set up on your OpenAI account — `gpt-realtime-2` (audio)
+   and web search are paid usage.
+3. Paste the key into the add-on's **`openai_api_key`** option.
+
+> **Heads-up on rate limits:** new accounts start at a low tokens-per-minute (TPM)
+> tier. `gpt-realtime-2` audio is token-heavy, so if you see *"Rate limit reached"*
+> in the logs, raise your usage tier in the OpenAI dashboard, or keep
+> `max_context_messages` modest (default 12).
+
+## 3. Let it control Home Assistant (MCP)
+
+The assistant controls your home through Home Assistant's **official MCP Server**.
+
+1. In HA: **Settings → Devices & Services → Add Integration → "Model Context
+   Protocol Server"** and add it.
+2. **Expose the entities** you want voice control over to **Assist**
+   (Settings → Voice assistants → *Exposed entities*). The MCP server only offers
+   what's exposed.
+3. In the add-on, leave **`ha_mcp_url`** **blank** — it then uses the built-in
+   endpoint (`http://supervisor/core/api/mcp`) with the add-on's own token. Leave
+   **`longlived_token`** blank too, unless startup logs a 401/403 on
+   `/core/api/mcp` (then paste a HA long-lived token there).
+
+You get a small fixed set of Assist tools (`HassTurnOn`, `HassTurnOff`,
+`HassLightSet`, `GetLiveContext`, `GetDateTime`, …). **`GetLiveContext`** is the
+"what's the current state?" tool — keep it; it's what answers *"is the light on?"*.
+
+**`mcp_tool_allowlist`** (optional): a comma-separated whitelist of tool names. Leave
+blank to expose all, or trim to just what you use, e.g.:
+`HassTurnOn,HassTurnOff,HassLightSet,GetLiveContext,GetDateTime`
+
+## 4. Recommended starting settings
+
+These mirror a known-good working configuration. Every option also has inline help
+on the Configuration tab.
+
+| Option | Value | Note |
+|---|---|---|
+| `openai_model` | `gpt-realtime-2` | newest speech-to-speech model |
+| `openai_voice` | `marin` | `marin`/`cedar` are the newest voices |
+| `openai_speed` | `1.0` | playback speed (0.25–1.5) |
+| `max_output_tokens` | `0` | 0 = unlimited; set e.g. 1024 to cap long replies |
+| `noise_reduction` | `off` | try `near_field` if the VAD misfires |
+| `turn_detection_type` | `semantic_vad` | natural end-of-turn, echo-resistant |
+| `vad_eagerness` | `low` | waits longest before ending your turn |
+| `interrupt_response` | `false` | hands-free barge-in (leave off on Voice PE) |
+| `transcription_language` | *(blank)* | set your ISO code (e.g. `nl`) to log the user transcript |
+| `transcription_model` | `gpt-4o-transcribe` | side-channel transcript only |
+| `follow_up_listen_seconds` | `8` | mic stays open this long to answer back |
+| `follow_up_open_delay_ms` | `0` | raise to ~200 if the device hears its own tail |
+| `playback_prebuffer_ms` | `0` | raise to ~150 if you hear crackle |
+| `max_context_messages` | `12` | bounds per-turn token cost |
+| `enable_web_search` | `false` | turn on to allow online lookups |
+| `web_search_model` | `gpt-5.4-mini` | cheapest model that supports web search |
+| `instructions` | *(English default)* | the system prompt; swap the LANGUAGE line for your language |
+
+## 5. Web search
+
+When **`enable_web_search`** is `true`, the assistant gets a `web_search` tool. When
+it needs current or general info (weather, news, facts), it calls that tool; the
+add-on then makes a **second, server-side OpenAI call** (the Responses API
+`web_search` built-in tool, on **`web_search_model`**) and reads a short spoken
+answer back.
+
+- Uses your **existing OpenAI key** — no extra account.
+- Default model `gpt-5.4-mini` ≈ **$0.016 per search**. Other options trade
+  price/quality (`gpt-5-mini`, `gpt-5.4`, `gpt-5.5`, …).
+- Adds ~1–3 s while it searches (the device shows "thinking").
+- If the model name is rejected, the assistant just says it couldn't search — it
+  won't crash the session, so you can change `web_search_model` and retry.
+
+## 6. Options reference & tuning
+
+Every option has a description on the **Configuration** tab. The ones worth knowing:
+
+- **Model / voice / transcription model** are dropdowns with a **`custom`** entry +
+  a `*_custom` text field if you want a value not in the list.
+- **`transcription_language`** turns the side-channel transcript on. With it set you
+  get `🗣️ user: …` lines in the add-on log (handy for debugging); it does **not**
+  change what the model understands — the main model hears your audio natively.
+- **`follow_up_open_delay_ms` / `playback_prebuffer_ms`** default to `0` (snappy).
+  If, after a reply, the device sometimes triggers on its own tail, raise the open
+  delay to ~200 ms. If you hear an occasional crackle at the start of replies, raise
+  the prebuffer to ~150 ms.
+
+## 7. Reading the logs
+
+The add-on log shows each turn: `🗣️ user:` (when transcription language is set),
+`🤖 assistant:` (the reply text), `📞 phase ->` (device state), tool calls, and
+`🔌 …reconnecting` / `✅ reconnected` on a connection recovery. View it on the add-on
+**Log** tab.
+
+## Firmware (Home Assistant Voice PE only)
+
+This add-on expects the custom **Voice PE firmware** that turns the device into a
+thin client (it streams mic audio here and plays the reply). That firmware:
+
+- is **specific to the Home Assistant Voice PE** hardware (ESP32-S3 + XMOS), and
+- lives in a **separate, private repository**.
+
+If you're setting this up from a friend's share, ask the maintainer for the firmware
+config and the GitHub access token it needs — they have the full from-scratch
+install guide (flashing + adopting the device in ESPHome Builder).
+
+## Credits
+
+- Backend forked from **[fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime)** (Felix Fricke).
+- Firmware thin-client design based on **[maxmaxme/home-assistant-voice-pe](https://github.com/maxmaxme/home-assistant-voice-pe)**, a fork of **[esphome/home-assistant-voice-pe](https://github.com/esphome/home-assistant-voice-pe)** (Nabu Casa / ESPHome).
+- Inspiration from **[marcinnowak79/home-assistant-voice-pe](https://github.com/marcinnowak79/home-assistant-voice-pe)** (gemini-live-proxy).
+- Built on **[pipecat-ai](https://github.com/pipecat-ai/pipecat)**, the **OpenAI Realtime API**, and the official **[Home Assistant MCP Server](https://www.home-assistant.io/integrations/mcp_server/)** integration.

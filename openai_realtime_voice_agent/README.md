@@ -1,54 +1,44 @@
-# OpenAI Realtime Voice Agent - Server
+# OpenAI Realtime 2 Voice Agent
 
-Home Assistant addon that provides OpenAI Realtime API integration with WebSocket support for ESP32 devices.
+Talk to your home with **OpenAI's `gpt-realtime-2`** speech-to-speech model. This
+Home Assistant add-on runs the realtime voice session and bridges it to Home
+Assistant device control (via the official **MCP Server** integration) and optional
+**web search** — so you can say *"alexa, turn off the bedroom lamp"* or *"what's the
+weather tomorrow?"* and get a spoken answer.
 
-## Installation
+It is the cloud-facing half of a two-part project. The other half is custom
+**firmware for the Home Assistant Voice PE** device, which streams microphone audio
+to this add-on and plays the reply back. **This add-on is designed for that Voice PE
+firmware** (a thin client that talks a small WebSocket protocol); it is not a
+drop-in for the stock HA voice pipeline.
 
-### Option 1: Add Repository (Recommended)
+## What it does
 
-1. In Home Assistant, go to **Supervisor** → **Add-on Store**
-2. Click the **⋮** menu (top right) → **Repositories**
-3. Add this repository: `https://github.com/fjfricke/ha-openai-realtime`
-4. Find **OpenAI Realtime Voice Agent** in the addon store and install it
+- **Natural voice conversations** with `gpt-realtime-2` (speech in → speech out, no
+  separate STT/TTS step).
+- **Controls Home Assistant** through the official HA *MCP Server* integration —
+  lights, switches, scenes, climate, etc., scoped to the entities you expose to
+  Assist.
+- **Web search** (optional) — the assistant can look things up online (weather,
+  news, facts) via a single OpenAI call, off by default.
+- **Tunable from the UI** — model, voice, speaking speed, turn detection, a
+  post-reply follow-up window, transcription language, and more. Every option has
+  inline help on the Configuration tab.
 
-### Option 2: Manual Installation
+## Quick start
 
-1. Copy the `openai_realtime_voice_agent/` folder to your Home Assistant `addons/` directory
-2. Restart Home Assistant Supervisor
-3. Install the addon from **Supervisor** → **Add-on Store** → **Local Add-ons**
+1. Add this repository to Home Assistant (Settings → Add-ons → Add-on Store → ⋮ →
+   **Repositories**): `https://github.com/xandervanerven/ha-openai-realtime`
+2. Install **OpenAI Realtime 2 Voice Agent** and open its **Configuration** tab.
+3. Paste your **OpenAI API key**, install the HA **MCP Server** integration, expose
+   a few entities to Assist, and **Start** the add-on.
+4. Flash the Voice PE firmware (see the maintainer / the project's `INSTALL.md`).
 
-## Configuration
+Full step-by-step instructions are on the **Documentation** tab (`DOCS.md`).
 
-Configure the addon in Home Assistant:
+## Credits
 
-1. Go to **Supervisor** → **Add-on Store** → **OpenAI Realtime Voice Agent** → **Configuration**
-2. Set the following required options:
-   - `openai_api_key`: Your OpenAI API key
-   - `websocket_port`: Port for WebSocket connections (default: 8080)
-   - `ha_mcp_url`: Home Assistant MCP URL (e.g., `http://localhost:8123/api/mcp`)
-   - `longlived_token`: Home Assistant long-lived access token
-
-3. Optional settings:
-   - `vad_threshold`: Voice activity detection threshold (0.0-1.0, default: 0.5)
-   - `vad_prefix_padding_ms`: Audio padding before detection in milliseconds (default: 300)
-   - `vad_silence_duration_ms`: Duration of silence before stopping in milliseconds (default: 500)
-   - `instructions`: Custom instructions for the AI assistant (default: "You are the Home Assistant Voice Agent and can control the Smart Home.")
-   - `session_reuse_timeout_seconds`: Timeout for session reuse in seconds (default: 300, max: 3600)
-   - `enable_recording`: Enable audio recording for debugging (default: false)
-
-4. Start the addon
-
-## Features
-
-- OpenAI Realtime API integration
-- WebSocket server for ESP32 devices
-- Home Assistant MCP (Model Context Protocol) integration
-- Voice activity detection
-- Session management with automatic reuse
-- Optional audio recording for debugging
-
-## Troubleshooting
-
-- **MCP connection issues**: Ensure you're using a long-lived token and the correct MCP URL (`http://homeassistant.local:8123/api/mcp`)
-- **WebSocket connection**: Check that the port is accessible and not blocked by firewall
-- **Check logs**: View addon logs in Home Assistant Supervisor
+- Backend forked from **[fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime)** (Felix Fricke).
+- Firmware thin-client design based on **[maxmaxme/home-assistant-voice-pe](https://github.com/maxmaxme/home-assistant-voice-pe)**, a fork of **[esphome/home-assistant-voice-pe](https://github.com/esphome/home-assistant-voice-pe)** (Nabu Casa / ESPHome).
+- Inspiration from **[marcinnowak79/home-assistant-voice-pe](https://github.com/marcinnowak79/home-assistant-voice-pe)** (gemini-live-proxy).
+- Built on **[pipecat-ai](https://github.com/pipecat-ai/pipecat)**, the **OpenAI Realtime API**, and the official **[Home Assistant MCP Server](https://www.home-assistant.io/integrations/mcp_server/)** integration.

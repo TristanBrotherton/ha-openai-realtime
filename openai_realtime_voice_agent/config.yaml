@@ -1,8 +1,8 @@
-name: OpenAI Realtime Voice Agent
-version: "0.4.23"
+name: OpenAI Realtime 2 Voice Agent
+version: "0.4.24"
 slug: openai_realtime_voice_agent
-description: Voice control using OpenAI Realtime API with WebSocket support for ESP32 devices
-url: https://github.com/fjfricke/ha-openai-realtime
+description: Talk to your home with OpenAI gpt-realtime-2 — a voice agent for the Home Assistant Voice PE, with live device control and web search.
+url: https://github.com/xandervanerven/ha-openai-realtime
 arch:
   - aarch64
   - amd64
@@ -130,7 +130,7 @@ options:
   # snappier; raise it if, after a reply, the device starts "hearing itself"
   # (a spurious turn) or echoes. 200 is a good start; try 0 only if your audio
   # tail is truly gone by the time the reply ends. Sent in the handshake too.
-  follow_up_open_delay_ms: 200
+  follow_up_open_delay_ms: 0
   # Playback jitter buffer (ms). The device holds incoming TTS audio until this
   # much has accumulated before it starts playing, giving the audio pipeline a
   # cushion so brief network hiccups don't make the speaker run dry mid-word
@@ -138,11 +138,26 @@ options:
   # stutter but adds this much latency before a reply starts; 0 = off (play
   # immediately). 150 is a good start; raise to 250-300 if you still hear
   # crackle. Sent in the handshake, so tune it and just restart the add-on.
-  playback_prebuffer_ms: 150
-  # OpenAI instructions. For non-English, lock the language explicitly, e.g.:
-  #   "Je bent de Home Assistant spraakassistent en bestuurt het smart home.
-  #    Spreek en versta UITSLUITEND Nederlands. Wissel nooit van taal."
-  instructions: "You are the Home Assistant Voice Agent and can control the Smart Home."
+  playback_prebuffer_ms: 0
+  # OpenAI instructions (system prompt). This default is tuned for a natural voice
+  # assistant: it tells the model to call tools SILENTLY (no "let me check…"
+  # preamble), give one complete answer, and vary its confirmations. For another
+  # language, swap the LANGUAGE line, e.g. Dutch:
+  #   "LANGUAGE: Speak and understand only Dutch. Never switch language."
+  instructions: >-
+    You are the cheerful, friendly voice assistant of Home Assistant and you
+    control the smart home. LANGUAGE: Speak and understand only English, with a
+    natural, neutral accent. Never switch language, not even for stray foreign
+    words or an accent; do not infer the language from accent or a single word.
+    STYLE: Your replies are read aloud, so keep them short and natural. Do not
+    read out entity IDs, lists, or technical names; use ordinary names ("the
+    bedroom lamp"). Call your tools silently — say nothing like "Okay, let me
+    check" or "one moment" beforehand; just do it and then give one complete
+    answer. Do not start every answer with "Okay"; vary your confirmation
+    naturally, e.g. "The bedroom lamp is on now" or "Done, the light is off".
+    BEHAVIOR: Carry out requested actions immediately with your tools and never
+    guess. If you are unsure which device, room, or action is meant, ask a short
+    clarifying question first. If something fails, briefly say what went wrong.
   # Session management
   session_reuse_timeout_seconds: 300  # 5 Minuten (in Sekunden)
   # Max number of recent conversation messages restored into a session (0 =
