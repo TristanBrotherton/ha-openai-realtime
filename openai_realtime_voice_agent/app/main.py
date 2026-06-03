@@ -77,6 +77,36 @@ class SafeRealtimeLLMService(OpenAIRealtimeLLMService):
     async def _truncate_current_audio_response(self):  # type: ignore[override]
         return
 
+    async def reset_conversation(self):  # type: ignore[override]
+        """Reconnect WITHOUT forcing a response on the reconnected session.
+
+        pipecat's reset_conversation() (used by ConnectionRecovery on a 60-min cap
+        / keepalive drop) reconnects and leaves `_llm_needs_conversation_setup =
+        True`. The collision: if a turn was mid-flight when the WS dropped,
+        `_create_response()` had already set `_run_llm_when_api_session_ready =
+        True` (because `_api_session_ready` went False on disconnect). After the
+        reconnect, the `session.updated` handler sees that flag and fires
+        `_create_response()` — but under semantic_vad (`create_response=true`) the
+        SERVER also auto-creates a response for the user's next turn. Two
+        response.create events collide → `conversation_already_has_active_response`,
+        and that turn gets no answer (observed: first turn right after a reconnect
+        fails, ~1 in 20 reconnects — whenever the user happens to speak in the few
+        seconds just after a reconnect).
+
+        Fix: after the normal reconnect, clear `_run_llm_when_api_session_ready` so
+        the reconnected session does NOT self-create a response, and set
+        `_llm_needs_conversation_setup = False` (same as the startup pre-seed) — the
+        server-VAD drives every user-turn response, so we never need to create one
+        ourselves on reconnect. The live context is untouched (it's restored by the
+        SessionManager on the next real turn).
+        """
+        await super().reset_conversation()
+        try:
+            self._run_llm_when_api_session_ready = False
+            self._llm_needs_conversation_setup = False
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"⚠️ could not clear post-reconnect response flags: {e!r}")
+
 
 class Application:
     """Main application class using Pipecat."""
