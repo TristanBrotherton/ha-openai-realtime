@@ -1,97 +1,65 @@
-# OpenAI Realtime Voice Agent — ha-mcp + Voice PE fork
+# OpenAI Realtime 2 Voice Agent (Home Assistant Voice PE)
 
-Voice control for Home Assistant using the **OpenAI Realtime API** with
-ESP32-S3 devices.
+A Home Assistant **add-on** that turns a [Voice PE](https://www.home-assistant.io/voice-pe/)
+device into a low-latency voice assistant built on **OpenAI's Realtime API**
+(`gpt-realtime-2`). The device streams microphone audio to this add-on over a
+plain WebSocket; the add-on runs the Realtime speech-to-speech session and
+controls Home Assistant through the official
+**[Home Assistant MCP Server](https://www.home-assistant.io/integrations/mcp_server/)**
+integration. STT, TTS and the LLM all run in the Realtime session — there is no
+Home Assistant `voice_assistant` pipeline on the audio path.
 
-> **Fork of [`fjfricke/ha-openai-realtime`](https://github.com/fjfricke/ha-openai-realtime).**
-> Changes in this fork:
-> - Model defaults to **`gpt-realtime-2`** (configurable via `openai_model`).
-> - Home Assistant control via the unofficial
->   **[ha-mcp](https://github.com/homeassistant-ai/ha-mcp)** server (set
->   `ha_mcp_url` + `longlived_token`); optional `mcp_tool_allowlist` to trim
->   ha-mcp's 80+ tools for a faster realtime session.
-> - Speaks the **`maxmaxme` `va_client` wire protocol** so it pairs with the
->   polished Voice PE firmware at
->   [xandervanerven/home-assistant-voice-pe](https://github.com/xandervanerven/home-assistant-voice-pe):
->   sends `hello`/`phase`/`pong`, accepts `start`/`ping`/`interrupt`, and
->   resamples the device's 16 kHz mic up to 24 kHz.
-> - **Handsfree barge-in**: the firmware keeps the mic open during replies; this
->   add-on's server-VAD interrupts the response when you talk over it.
-> - Builds **locally** from the Dockerfile (no `image:` key) so the fork works
->   without publishing to a registry.
+> Fork of **[fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime)**,
+> retargeted at `gpt-realtime-2`, the official HA MCP Server, optional web search,
+> and the **Voice PE thin-client firmware** (a separate repo — see below).
 
-## Components
+## Repository layout
 
-This repository contains two main components:
+- **[`openai_realtime_voice_agent/`](openai_realtime_voice_agent/)** — the Home
+  Assistant add-on (Python / [Pipecat](https://github.com/pipecat-ai/pipecat)).
+  This is the only thing you install.
+  - [`DOCS.md`](openai_realtime_voice_agent/DOCS.md) — full setup: OpenAI key, the
+    Home Assistant MCP connection, recommended settings, web search, all options.
+  - [`CHANGELOG.md`](openai_realtime_voice_agent/CHANGELOG.md) — what changed per version.
 
-- **Server** (`openai_realtime_voice_agent/`): Home Assistant addon that provides OpenAI Realtime API integration and WebSocket server for ESP32 devices
-- **Client** (`home-assistant-voice-pe/`): the original fjfricke ESPHome client (kept for reference). For this fork, flash the **maxmaxme-based firmware** at [xandervanerven/home-assistant-voice-pe](https://github.com/xandervanerven/home-assistant-voice-pe) instead.
+The **device firmware** lives in its own repository —
+**[xandervanerven/home-assistant-voice-pe](https://github.com/xandervanerven/home-assistant-voice-pe)**
+(a custom `va_client` ESPHome component, specific to the Voice PE hardware).
 
-## Features
+## Install
 
-### Server Features
+1. In Home Assistant, open **Settings → Add-ons → Add-on store → ⋮ → Repositories**
+   and add `https://github.com/xandervanerven/ha-openai-realtime`.
+2. Install **OpenAI Realtime 2 Voice Agent**. It ships with no prebuilt `image:`,
+   so Home Assistant builds it locally on first install (a few minutes on a Pi).
+3. Configure the add-on and flash the companion firmware — see
+   [`openai_realtime_voice_agent/DOCS.md`](openai_realtime_voice_agent/DOCS.md).
 
-- **OpenAI Realtime API Integration**: Direct integration with OpenAI's Realtime API for natural language interactions
-- **WebSocket Server**: Bidirectional WebSocket connection for ESP32 devices with low latency
-- **Home Assistant MCP Integration**: Integration with Model Context Protocol for smart home control
-- **Voice Activity Detection (VAD)**: Automatic detection of speech vs. silence for optimal conversation flow
-- **Session Management**: Automatic session reuse for better performance and conversation continuity
-- **Audio Recording**: Optional audio recording for debugging purposes
+(An optional GitHub Actions workflow can publish container images to ghcr.io; it
+isn't needed for a normal local-build install.)
 
-### Client Features
+## How it works
 
-- **Voice Assistant**: Real-time voice interaction with OpenAI Realtime API via WebSocket
-- **Wake Word Detection**: Multiple wake words supported ("Okay Nabu", "Hey Jarvis", "Hey Mycroft")
-- **LED Feedback**: Visual status indicators via 12-LED ring for various states
-- **Hardware Controls**: Button controls and hardware mute switch for privacy
-- **Auto Gain Control (AGC)**: Hardware-based automatic volume adjustment for consistent audio quality
-- **Echo Cancellation (AEC)**: Hardware-based echo suppression prevents feedback
+```
+Voice PE (ESP32-S3)  ──WS, 16 kHz PCM up──▶   this add-on    ──▶  OpenAI Realtime API
+  va_client firmware  ◀──── 24 kHz PCM down──  (Pipecat)          (gpt-realtime-2)
+                                                   │ tools
+                                                   ▼
+                                         Home Assistant MCP Server
+```
 
-### Conversation Behavior
+The device does wake-word detection and XMOS audio cleanup locally and is a thin
+client. Interrupt a reply with the **"stop"** word or the center button — the mic
+is gated off while the assistant speaks, so there is no handsfree barge-in on this
+hardware (the XMOS AEC isn't strong enough for seamless talk-over).
 
-- **Immediate Response**: After wake word detection, you can speak immediately without waiting
-- **Natural Conversation Flow**: During silence, you can continue speaking naturally - the assistant listens continuously
-- **Interruption Handling**: User input during assistant responses is ignored, except for wake words which can interrupt
-- **Stop Words**: Conversation ends when a stop word is detected (e.g., "thank you", "stop") using a dedicated tool
-- **Session Continuity**: Previous conversation history is maintained when a new wake word is spoken within the session reuse timeout period after the last conversation ended
-- **Wake Word Restart**: After a conversation ends, a new wake word starts a fresh interaction while preserving context within the timeout window
+## Credits
 
-## Documentation
-
-- **Server Installation**: See [`openai_realtime_voice_agent/README.md`](openai_realtime_voice_agent/README.md)
-- **Client Installation**: See [`home-assistant-voice-pe/README.md`](home-assistant-voice-pe/README.md)
-
-## Quick Start
-
-1. **Install the Server Addon**: Follow the [server documentation](openai_realtime_voice_agent/README.md)
-2. **Configure ESP32 Device**: Follow the [client documentation](home-assistant-voice-pe/README.md)
-
-## Home Assistant control via ha-mcp
-
-This fork targets the unofficial [ha-mcp](https://github.com/homeassistant-ai/ha-mcp)
-server (far more capable than HA's built-in MCP — it can create automations,
-scripts, scenes, dashboards, query history, etc.). Configure the add-on with:
-
-- `ha_mcp_url`: ha-mcp's Streamable-HTTP endpoint, e.g.
-  `http://homeassistant.local:8086/mcp` (run ha-mcp as its own add-on/container).
-- `longlived_token`: a Home Assistant long-lived access token.
-- `mcp_tool_allowlist` (optional): comma-separated tool names to expose.
-
-To use HA's **built-in** MCP instead, leave `ha_mcp_url` blank (defaults to
-`http://supervisor/core/api/mcp`) and enable the *Model Context Protocol Server*
-integration in Home Assistant. Note the built-in `supervisor` endpoint can be
-flaky — if so, set `ha_mcp_url` to `http://homeassistant.local:8123/api/mcp` and
-provide a `longlived_token`.
-
-## Add-on install
-
-Add this repository to **Settings → Add-ons → Add-on store → ⋮ → Repositories**
-(`https://github.com/xandervanerven/ha-openai-realtime`), then install
-*OpenAI Realtime Voice Agent*. The add-on has no prebuilt `image:`, so Home
-Assistant builds it locally on first install (this can take several minutes on a
-Raspberry Pi). Advanced users can publish images via the included GitHub Actions
-workflow and re-add an `image:` key to `config.yaml` for faster installs.
+- Forked from **[fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime)**.
+- Built on **[Pipecat](https://github.com/pipecat-ai/pipecat)**.
+- Firmware thin-client design based on **[maxmaxme/home-assistant-voice-pe](https://github.com/maxmaxme/home-assistant-voice-pe)** (a fork of **[esphome/home-assistant-voice-pe](https://github.com/esphome/home-assistant-voice-pe)**, Nabu Casa / ESPHome).
+- Inspiration from **[marcinnowak79/home-assistant-voice-pe](https://github.com/marcinnowak79/home-assistant-voice-pe)** (gemini-live-proxy).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
