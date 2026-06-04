@@ -49,9 +49,7 @@ Voice PE (ESP32-S3)  ──WS, 16 kHz PCM up──▶   this add-on    ──▶
 ```
 
 The device does wake-word detection and XMOS audio cleanup locally and is a thin
-client. Interrupt a reply with the **"stop"** word or the center button — the mic
-is gated off while the assistant speaks, so there is no handsfree barge-in on this
-hardware (the XMOS AEC isn't strong enough for seamless talk-over).
+client. Interrupt a reply with the **"stop"** word or the center button.
 
 ## Credits
 
