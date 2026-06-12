@@ -2,6 +2,15 @@
 
 All notable changes to this add-on. Newest first.
 
+## 0.5.1
+
+**Cost guard** (fork addition): every OpenAI response is now priced from the
+API's own usage figures and logged (💰 lines), the day's running total
+persists across restarts, web searches are counted, and a new optional
+**`daily_budget_usd`** cap (⚙️ Advanced) refuses *new* conversations once the
+day's estimated spend reaches it — in-flight conversations are never cut.
+Estimates are deliberate upper bounds (all tokens priced at audio rates).
+
 ## 0.5.0
 
 A big stable release: everything built and tested on the dev channel over the

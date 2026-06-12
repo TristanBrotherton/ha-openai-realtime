@@ -1,5 +1,5 @@
 name: OpenAI Realtime 2 Voice Agent
-version: "0.5.0"
+version: "0.5.1"
 slug: openai_realtime_voice_agent
 description: Talk to your home with OpenAI gpt-realtime-2 — a voice agent for the Home Assistant Voice PE, with live device control and web search.
 url: https://github.com/xandervanerven/ha-openai-realtime
@@ -90,6 +90,11 @@ options:
   mcp_tool_allowlist: ""
 
   # --- ⚙️ Advanced ---
+  # Daily spend cap in USD, estimated per response from OpenAI usage events
+  # (upper bound). 0 = no cap (per-response cost logging stays on). When the
+  # cap is reached, NEW conversations are refused until midnight; an
+  # in-flight conversation is never cut.
+  daily_budget_usd: 0.0
   websocket_port: 8080
   session_reuse_timeout_seconds: 300
   max_context_messages: 12
@@ -129,6 +134,7 @@ schema:
   longlived_token: password
   mcp_tool_allowlist: str
   # --- ⚙️ Advanced ---
+  daily_budget_usd: float(0,1000)
   websocket_port: int(1024,65535)
   session_reuse_timeout_seconds: int(0,3600)
   max_context_messages: int(0,100)

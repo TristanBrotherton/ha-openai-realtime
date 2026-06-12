@@ -8,7 +8,7 @@ from typing import Optional, Callable, Awaitable, Dict
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineTask
+from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.transports.websocket.server import WebsocketServerTransport, WebsocketServerParams
 from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
 
@@ -22,6 +22,7 @@ from app.session_manager import SessionManager
 from app.audio_recording_service import AudioRecordingService
 from app.phase_emitter import PhaseEmitter
 from app.transcript_logger import TranscriptLogger
+from app.cost_guard import CostGuard, UsageLedger
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,7 @@ class WebSocketHandler:
         follow_up_ms: int = 0,
         follow_up_open_delay_ms: int = 1500,
         playback_prebuffer_ms: int = 0,
+        usage_ledger: Optional[UsageLedger] = None,
     ):
         """
         Initialize WebSocket handler.
@@ -277,6 +279,7 @@ class WebSocketHandler:
         self.follow_up_ms = max(0, int(follow_up_ms))
         self.follow_up_open_delay_ms = max(0, int(follow_up_open_delay_ms))
         self.playback_prebuffer_ms = max(0, int(playback_prebuffer_ms))
+        self.usage_ledger = usage_ledger
 
         self.transport: Optional[WebsocketServerTransport] = None
         self.pipeline: Optional[Pipeline] = None
@@ -405,6 +408,11 @@ class WebSocketHandler:
 
         pipeline_components.append(output_activity_tracker)
 
+        # Price each completed OpenAI response from its usage MetricsFrame and
+        # keep the daily ledger current (cost logging + budget enforcement).
+        if self.usage_ledger:
+            pipeline_components.append(CostGuard(self.usage_ledger))
+
         # Emit va_client phase messages (listening/thinking/replying/idle) to
         # the device, derived from Pipecat speaking frames as they pass
         # downstream. Placed before transport.output() so it sees both the
@@ -432,7 +440,14 @@ class WebSocketHandler:
         # Create pipeline runner and task
         # Disable idle timeout - server should always stay ready for connections
         runner = PipelineRunner()
-        task = PipelineTask(pipeline, idle_timeout_secs=None, cancel_on_idle_timeout=False)
+        # enable_usage_metrics: pipecat only emits the LLM token-usage
+        # MetricsFrames the CostGuard prices when usage metrics are on.
+        task = PipelineTask(
+            pipeline,
+            params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+            idle_timeout_secs=None,
+            cancel_on_idle_timeout=False,
+        )
         
         # Start pipeline in background
         asyncio.create_task(runner.run(task))
@@ -596,6 +611,15 @@ class WebSocketHandler:
             """Handle new WebSocket client connection."""
             client_id = self.extract_client_id(websocket)
             logger.info(f"🔗 New WebSocket connection from IP: {client_id}")
+            # Budget gate: refuse NEW sessions once the daily cap is reached.
+            # In-flight conversations are never cut — only fresh connects.
+            if self.usage_ledger and self.usage_ledger.over_budget():
+                logger.warning(
+                    f"🚫 Refusing connection from {client_id}: daily budget "
+                    f"${self.usage_ledger.daily_budget_usd:.2f} reached "
+                    f"(spent ≈ ${self.usage_ledger.spent_usd:.2f}). Resets at midnight.")
+                await websocket.close(code=1013, reason="daily budget exceeded")
+                return
             # Track the raw connection so we can push phase/control TEXT frames.
             self._websockets.add(websocket)
             # Handshake ack expected by the va_client protocol (server -> device
@@ -614,6 +638,8 @@ class WebSocketHandler:
                     "playback_prebuffer_ms": self.playback_prebuffer_ms,
                 },
             )
+            if self.usage_ledger:
+                self.usage_ledger.add_session()
             await on_client_connected_callback(client_id)
 
         @transport.event_handler("on_client_disconnected")

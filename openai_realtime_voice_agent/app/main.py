@@ -13,6 +13,7 @@ from pipecat.transports.websocket.server import WebsocketServerTransport
 from app.mcp_service import HomeAssistantMCPService
 from app.disconnect_tool import get_disconnect_tool_definition, create_disconnect_tool_handler
 from app.web_search_tool import get_web_search_tool_definition, create_web_search_tool_handler
+from app.cost_guard import UsageLedger
 from app.audio_recording_service import AudioRecordingService
 from app.session_manager import SessionManager
 from app.websocket_handler import WebSocketHandler
@@ -328,7 +329,20 @@ class Application:
         
         if not openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
-        
+
+        # Daily budget guard (0 = cost logging only, no cap). Costs are
+        # estimated per response from OpenAI usage events; the ledger persists
+        # in /data so an add-on restart doesn't reset the day's spend.
+        try:
+            daily_budget_usd = float(os.environ.get("DAILY_BUDGET_USD", "0"))
+        except (TypeError, ValueError):
+            daily_budget_usd = 0.0
+        self.usage_ledger = UsageLedger(model=openai_model, daily_budget_usd=daily_budget_usd)
+        logger.info(
+            f"💰 Cost guard: model rates for {openai_model}, daily budget "
+            + (f"${daily_budget_usd:.2f}" if daily_budget_usd > 0 else "disabled (logging only)")
+            + f", spent today ≈ ${self.usage_ledger.spent_usd:.3f}")
+
         # Initialize Home Assistant MCP Service
         mcp_client = None
         try:
@@ -353,6 +367,7 @@ class Application:
             follow_up_ms=follow_up_ms,
             follow_up_open_delay_ms=follow_up_open_delay_ms,
             playback_prebuffer_ms=playback_prebuffer_ms,
+            usage_ledger=self.usage_ledger,
         )
         logger.info(
             f"🔁 Follow-up window: {follow_up_listen_seconds}s "
@@ -609,10 +624,15 @@ class Application:
 
             # Register web search tool handler (only when the tool is exposed)
             if self.enable_web_search:
-                self.openai_service.register_function(
-                    "web_search",
-                    create_web_search_tool_handler(self.openai_api_key, self.web_search_model),
-                )
+                _web_search = create_web_search_tool_handler(self.openai_api_key, self.web_search_model)
+
+                async def _metered_web_search(params):
+                    # Web searches are a second, separately-billed API call —
+                    # count them in the daily ledger at a flat estimate.
+                    self.usage_ledger.add_web_search()
+                    await _web_search(params)
+
+                self.openai_service.register_function("web_search", _metered_web_search)
                 logger.info(f"✅ Registered web_search tool handler (model={self.web_search_model})")
             
             # Register MCP tool handlers if available

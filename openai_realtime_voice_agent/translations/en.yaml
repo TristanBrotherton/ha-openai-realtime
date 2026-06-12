@@ -157,6 +157,15 @@ configuration:
       fast and cheap.
 
   # --- ⚙️ Advanced ---
+  daily_budget_usd:
+    name: "⚙️ Advanced · Daily budget (US$)"
+    description: >-
+      Hard daily spend cap, estimated from OpenAI's own usage figures (the
+      estimate rounds up, never down). 0 disables the cap — per-response cost
+      logging stays on either way (look for 💰 lines in the Log tab). When
+      the cap is reached, new conversations are refused until midnight; a
+      conversation already in progress is never cut off. Tip: $1/day covers
+      roughly 30 typical interactions on gpt-realtime-2.
   websocket_port:
     name: "⚙️ Advanced · Device port"
     description: >-
