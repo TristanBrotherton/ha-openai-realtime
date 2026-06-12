@@ -2,6 +2,20 @@
 
 All notable changes to this add-on. Newest first.
 
+## 0.5.2 (dev channel)
+
+- **No more deaf sessions.** If the connection to OpenAI silently died (network
+  blip, quiet server-side close), the assistant could sit unresponsive for
+  hours and your first question after that was lost. The connection's death is
+  now detected the moment it happens and repaired within seconds.
+- **The 60-minute reconnect now happens proactively while everything is
+  quiet** (session older than 55 minutes + a minute of silence), so it
+  practically never interrupts a conversation anymore.
+- **Smart-home commands are no longer cancelled by your own voice.** Continuing
+  to talk while a command was executing made the assistant abort the call and
+  claim the action failed — while it actually succeeded. Tool calls now always
+  finish and report the real result.
+
 ## 0.5.1 (dev channel)
 
 - Version sync after the stable **0.5.0** release: the dev channel contains the

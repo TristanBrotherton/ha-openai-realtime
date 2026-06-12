@@ -158,6 +158,50 @@ class SafeRealtimeLLMService(OpenAIRealtimeLLMService):
             return True
         return False
 
+    def register_function(self, function_name, handler, start_callback=None, *,
+                          cancel_on_interruption: bool = True):  # type: ignore[override]
+        """Force cancel_on_interruption=False for every tool registration.
+
+        pipecat cancels in-flight function-call tasks on EVERY user-speech
+        interruption — and semantic_vad fires one per utterance fragment, so
+        merely continuing your own sentence kills the tool call your previous
+        fragment started. By then the HTTP request to Home Assistant has
+        usually already been SENT: the action executes, but its result never
+        reaches the model, which then tells the user it failed (observed
+        live: the lights turned ON while the assistant claimed they
+        wouldn't). Our tools are all short-lived (HA service calls, one web
+        search), so letting them finish and report the truth always beats
+        killing them halfway. This single override covers every registration
+        path (MCP tools via pipecat's MCPClient, web_search, disconnect).
+        """
+        super().register_function(
+            function_name, handler, start_callback, cancel_on_interruption=False
+        )
+
+    async def _receive_task_handler(self):  # type: ignore[override]
+        """Surface OpenAI reader death as an ErrorFrame so recovery can act.
+
+        pipecat's receive loop can end without producing ANY ErrorFrame: a
+        silent server-side close ends the `async for` normally, and a network
+        drop raises ConnectionClosed, which the task manager merely LOGS
+        ("unexpected exception"). Nothing reaches ConnectionRecovery either
+        way, so the session sat deaf for HOURS until the next user utterance
+        hit the dead socket — losing that utterance (observed live twice).
+        Wrap the loop and report its end; ConnectionRecovery treats the
+        message as a reconnect trigger.
+        """
+        try:
+            await super()._receive_task_handler()
+        except asyncio.CancelledError:
+            raise  # our own disconnect/reset tearing the task down — not a death
+        except Exception as e:
+            await self.push_error(error_msg=f"realtime receive loop died: {e!r}")
+            return
+        # Loop ended without an exception: a clean server-side close, or the
+        # fatal-error path (which already pushed its own ErrorFrame —
+        # duplicates collapse in ConnectionRecovery's cooldown/guard).
+        await self.push_error(error_msg="realtime receive loop ended — connection closed")
+
 
 class Application:
     """Main application class using Pipecat."""

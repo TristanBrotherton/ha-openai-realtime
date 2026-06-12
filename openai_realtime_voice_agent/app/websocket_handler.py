@@ -163,6 +163,12 @@ class ConnectionRecovery(FrameProcessor):
     )
     RECONNECT_COOLDOWN_S = 5.0
     IDLE_UNSTICK_COOLDOWN_S = 2.0
+    # Proactive refresh: reconnect BEFORE OpenAI's 60-min session cap, but only
+    # while the house is genuinely quiet, so the cap practically never lands
+    # mid-conversation (where it costs the user a turn).
+    REFRESH_AGE_S = 55 * 60   # refresh once the session is this old
+    REFRESH_QUIET_S = 60.0    # ... and no mic audio flowed for this long
+    REFRESH_CHECK_S = 60.0    # poll cadence of the background check
 
     def __init__(self, openai_service, emit_idle=None, **kwargs):
         super().__init__(**kwargs)
@@ -175,9 +181,19 @@ class ConnectionRecovery(FrameProcessor):
         # age at a drop (the 60-min cap shows up as ~3600 s) and the reconnect
         # duration (the brief gap the user hears).
         self._connected_at = time.monotonic()
+        # Proactive-refresh state. This processor sits right behind
+        # transport.input(), so every mic frame passes through it — the cheapest
+        # possible "is anyone interacting?" signal (the device only streams the
+        # mic during an active turn or the follow-up window).
+        self._last_input_audio = time.monotonic()
+        self._refresh_task = None
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
+        if self._refresh_task is None:
+            self._refresh_task = asyncio.create_task(self._proactive_refresh_loop())
+        if isinstance(frame, InputAudioRawFrame):
+            self._last_input_audio = time.monotonic()
         if isinstance(frame, ErrorFrame) and not self._reconnecting:
             msg = str(getattr(frame, "error", "") or "")
             # Two reconnect triggers:
@@ -192,7 +208,13 @@ class ConnectionRecovery(FrameProcessor):
             #      It can only come from OpenAI, so it needs no "client event" guard.
             send_flood = "client event" in msg and any(m in msg for m in self._DEATH_MARKERS)
             session_dead = any(m in msg for m in self._SESSION_DEAD_MARKERS)
-            if send_flood or session_dead:
+            # (c) the OpenAI READ side died or ended (network drop / silent
+            #     server close). pipecat produces no ErrorFrame for these at
+            #     all — SafeRealtimeLLMService wraps the receive loop and
+            #     reports them with this message. Without it the session sat
+            #     deaf for hours until the next utterance hit the dead socket.
+            reader_dead = "realtime receive loop" in msg
+            if send_flood or session_dead or reader_dead:
                 now = time.monotonic()
                 if now - self._last_attempt >= self.RECONNECT_COOLDOWN_S:
                     self._reconnecting = True
@@ -241,6 +263,39 @@ class ConnectionRecovery(FrameProcessor):
             logger.error(f"❌ OpenAI reconnect attempt failed: {e!r}")
         finally:
             self._reconnecting = False
+
+    async def _proactive_refresh_loop(self):
+        """Refresh the OpenAI session BEFORE the 60-min cap, during real idle.
+
+        The cap reconnect is recoverable (~3 s), but when it lands
+        mid-conversation that turn hiccups. Refreshing proactively while
+        nothing is happening means users practically never meet the cap.
+        "Quiet" is double-checked: no assistant response in flight AND no mic
+        audio for REFRESH_QUIET_S — so it can never fire during a turn, a
+        reply, or an open follow-up window.
+        """
+        while True:
+            try:
+                await asyncio.sleep(self.REFRESH_CHECK_S)
+                if self._reconnecting:
+                    continue
+                now = time.monotonic()
+                age = now - self._connected_at
+                quiet = now - self._last_input_audio
+                busy = getattr(self._service, "_current_assistant_response", None) is not None
+                if (age >= self.REFRESH_AGE_S and quiet >= self.REFRESH_QUIET_S
+                        and not busy and now - self._last_attempt >= self.RECONNECT_COOLDOWN_S):
+                    self._reconnecting = True
+                    self._last_attempt = now
+                    logger.info(
+                        f"🔄 proactive session refresh (session {age/60:.0f} min old, "
+                        f"quiet for {quiet:.0f}s) — staying ahead of the 60-min cap"
+                    )
+                    await self._recover("proactive refresh before the 60-min session cap")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(f"⚠️ proactive refresh loop error: {e!r}")
 
     async def _unstick_idle(self, reason: str):
         """Emit `idle` to the device after a turn-ending error (e.g. rate limit).
