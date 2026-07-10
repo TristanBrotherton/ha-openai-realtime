@@ -13,6 +13,7 @@ PCM16). /share persists across add-on rebuilds and is reachable from the HA
 host, from where recordings are pulled into the household's private sample
 store. THESE ARE PERSONAL DATA: never commit them to a repo.
 """
+import asyncio
 import logging
 import os
 import re
@@ -131,12 +132,12 @@ def get_enrollment_tool_definition() -> Dict[str, Any]:
             "Start or stop a guided voice-training (enrollment) recording session "
             "for a household member. Use when someone asks to train, teach, or "
             "enroll their voice (e.g. 'teach the assistant my voice', 'voice "
-            "training', 'continue voice training'). IMPORTANT: if a [voice check] "
-            "system note has already identified the current speaker, START "
-            "IMMEDIATELY with that name — do not ask who is enrolling. Only ask "
-            "for a name when the speaker is unknown or they say they are enrolling "
-            "someone else. Then follow the returned protocol exactly. Recording "
-            "captures everything the microphone hears until stopped."
+            "training', 'continue voice training'). Call start IMMEDIATELY and "
+            "WITHOUT a person name — the system identifies the speaker by voice "
+            "automatically (never ask who is enrolling unless the tool says it "
+            "could not identify them, or they are enrolling someone else). Then "
+            "follow the returned protocol exactly. Recording captures everything "
+            "the microphone hears until stopped."
         ),
         "parameters": {
             "type": "object",
@@ -148,7 +149,12 @@ def get_enrollment_tool_definition() -> Dict[str, Any]:
                 },
                 "person": {
                     "type": "string",
-                    "description": "First name of the person enrolling (required for start)",
+                    "description": (
+                        "First name of the person enrolling. OPTIONAL: leave it out "
+                        "and the system uses the voice-identified speaker "
+                        "automatically. Only provide it when enrolling someone "
+                        "other than the current speaker."
+                    ),
                 },
             },
             "required": ["action"],
@@ -158,6 +164,7 @@ def get_enrollment_tool_definition() -> Dict[str, Any]:
 
 def create_enrollment_tool_handler(
     recorder: EnrollmentRecorder,
+    get_speaker_name: Optional[Callable[[], Optional[str]]] = None,
 ) -> Callable[["FunctionCallParams"], Awaitable[None]]:
     async def enrollment_tool_handler(params: "FunctionCallParams") -> None:
         args = params.arguments or {}
@@ -165,9 +172,23 @@ def create_enrollment_tool_handler(
         person = (args.get("person") or "").strip()
         try:
             if action == "start":
+                if not person and get_speaker_name is not None:
+                    # The voice verdict races the model's first tool call (the
+                    # probe needs ~3 s of mic audio). Wait for it briefly rather
+                    # than making the user answer a question the VAD tends to
+                    # drop (one-word replies often never commit — observed live).
+                    for _ in range(12):  # up to ~6 s
+                        person = (get_speaker_name() or "").strip()
+                        if person:
+                            break
+                        await asyncio.sleep(0.5)
                 if not person:
                     await params.result_callback(
-                        {"error": "A first name is required to start enrollment — ask who is enrolling."}
+                        {"error": (
+                            "Could not identify the speaker by voice. Ask for their "
+                            "first name, then call start again with person set — and "
+                            "tell them to answer promptly."
+                        )}
                     )
                     return
                 recorder.start(person)

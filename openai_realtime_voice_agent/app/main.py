@@ -739,10 +739,16 @@ class Application:
                 )
                 logger.info(f"✅ Registered web_search tool handler (model={self.web_search_model})")
             
-            # Register voice enrollment tool handler (fork)
+            # Register voice enrollment tool handler (fork). The speaker-name
+            # getter lets the tool default to the voice-identified person.
+            def _current_speaker_name():
+                if SPEAKER_PROBE is None:
+                    return None
+                return SPEAKER_PROBE.name_for(SPEAKER_PROBE.gate_speaker())
+
             self.openai_service.register_function(
                 "voice_enrollment",
-                create_enrollment_tool_handler(self.enrollment_recorder),
+                create_enrollment_tool_handler(self.enrollment_recorder, _current_speaker_name),
             )
             logger.info("✅ Registered voice_enrollment tool handler")
 
