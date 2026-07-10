@@ -2,7 +2,18 @@
   <img src="openai_realtime_voice_agent/icon.png" alt="OpenAI Realtime 2 Voice Agent — a stylised Voice PE" width="160"/>
 </p>
 
-# OpenAI Realtime 2 Voice Agent (Home Assistant Voice PE)
+# OpenAI Realtime 2 Voice Agent (Home Assistant Voice PE) (TristanBrotherton fork)
+
+> [!NOTE]
+> Fork of [xandervanerven/ha-openai-realtime](https://github.com/xandervanerven/ha-openai-realtime),
+> tracked so installs don't depend on upstream availability. Currently identical to
+> upstream v0.6.0. Pairs with the firmware fork
+> [TristanBrotherton/home-assistant-voice-pe](https://github.com/TristanBrotherton/home-assistant-voice-pe)
+> (custom wake word + volume fixes). Planned divergence: multi-device support —
+> upstream's backend accepts a single Voice PE per add-on instance (the pipecat
+> WebsocketServerTransport drops the previous client when a new one connects), so
+> today each device needs its own instance on its own port.
+
 
 > [!IMPORTANT]
 > **This is 1 of 2 repos — you need both halves.** This repo is the **backend add-on**
