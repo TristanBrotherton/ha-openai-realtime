@@ -97,7 +97,9 @@ ENROLLMENT_SCRIPT = (
     "Recording is ON — everything the microphone hears is now being captured, so run "
     "this session briskly and follow the protocol exactly. You are guiding {person} "
     "through voice training. Keep YOUR replies to a few words so the recording is "
-    "mostly their voice. Protocol, one step per conversational turn: "
+    "mostly their voice. First tell them: respond within a few seconds of each of "
+    "your prompts — if the device stops listening, wake it again and say "
+    "'continue voice training'. Protocol, one step per conversational turn: "
     "(1) Tell them: repeat the phrase 'hey leonard' once, naturally, after each of "
     "your go-aheads — and after each repetition reply with only a brief prompt like "
     "'again', 'next', 'good'. Collect EIGHT normal repetitions this way; count "
@@ -129,9 +131,12 @@ def get_enrollment_tool_definition() -> Dict[str, Any]:
             "Start or stop a guided voice-training (enrollment) recording session "
             "for a household member. Use when someone asks to train, teach, or "
             "enroll their voice (e.g. 'teach the assistant my voice', 'voice "
-            "training'). Start it with the person's first name, then follow the "
-            "returned protocol exactly. Recording captures everything the "
-            "microphone hears until stopped."
+            "training', 'continue voice training'). IMPORTANT: if a [voice check] "
+            "system note has already identified the current speaker, START "
+            "IMMEDIATELY with that name — do not ask who is enrolling. Only ask "
+            "for a name when the speaker is unknown or they say they are enrolling "
+            "someone else. Then follow the returned protocol exactly. Recording "
+            "captures everything the microphone hears until stopped."
         ),
         "parameters": {
             "type": "object",
