@@ -18,14 +18,16 @@ zero overhead beyond an attribute check per audio frame).
 """
 import asyncio
 import logging
+import os
 import time
+import wave
 from typing import Awaitable, Callable, Optional
 
 from .speaker_gender import classify_gender
 
 logger = logging.getLogger(__name__)
 
-CAPTURE_SECONDS = 2.5
+CAPTURE_SECONDS = 3.0
 SAMPLE_RATE = 16000
 CAPTURE_BYTES = int(CAPTURE_SECONDS * SAMPLE_RATE * 2)  # PCM16 mono
 # A verdict older than this is stale (device asleep between turns); the gate
@@ -90,6 +92,20 @@ class SpeakerProbe:
 
     async def _classify(self, data: bytes) -> None:
         try:
+            # Debug: when add-on recording is enabled, dump the raw capture so
+            # thresholds can be tuned offline against real device audio.
+            if os.environ.get("ENABLE_RECORDING", "false").strip().lower() == "true":
+                try:
+                    os.makedirs("recordings", exist_ok=True)
+                    path = f"recordings/probe_{time.strftime('%Y%m%d_%H%M%S')}.wav"
+                    with wave.open(path, "wb") as w:
+                        w.setnchannels(1)
+                        w.setsampwidth(2)
+                        w.setframerate(16000)
+                        w.writeframes(data)
+                    logger.info(f"🎙️ speaker probe capture saved: {path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ probe capture dump failed: {e!r}")
             label, f0, voiced = await asyncio.to_thread(classify_gender, data)
             self.current_label = label
             self.current_f0 = f0

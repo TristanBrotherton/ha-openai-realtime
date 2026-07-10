@@ -2,6 +2,16 @@
 
 All notable changes to this add-on. Newest first.
 
+## 0.7.1 (fork)
+
+- Speaker probe tuned for real device audio (live test found 3-7 voiced frames
+  in actual speech vs 100+ on synthetic bench audio): YIN threshold 0.15 → 0.20
+  with a moderate-periodicity argmin fallback, energy gate 0.15 → 0.08 of peak
+  RMS, minimum voiced frames 12 → 8, capture window 2.5 s → 3.0 s. Synthetic
+  bench unchanged (0% wrong on typical voices).
+- Debug: when `enable_recording` is on, each probe capture is saved to
+  `recordings/probe_*.wav` for offline threshold calibration.
+
 ## 0.7.0 (fork)
 
 - **Speaker context v1**: optional voice-type (male/female) detection for a

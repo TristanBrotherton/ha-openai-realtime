@@ -19,10 +19,16 @@ HOP = 160            # 10 ms
 F0_MIN, F0_MAX = 60.0, 350.0
 TAU_MIN = int(SAMPLE_RATE / F0_MAX)   # ~45
 TAU_MAX = int(SAMPLE_RATE / F0_MIN)   # ~266
-YIN_THRESHOLD = 0.15
+# 0.20 + argmin fallback (was 0.15, no fallback): real far-field audio through
+# the Voice PE's XMOS chain (AEC/AGC/noise suppression) is far less cleanly
+# periodic than synthetic bench audio — live tests found only 3-7 "voiced"
+# frames in 2.5 s of actual speech. The fallback accepts the global CMND
+# minimum when it is at least moderately periodic (< 0.45).
+YIN_THRESHOLD = 0.20
+YIN_FALLBACK_MAX = 0.45
 MALE_MAX_HZ = 150.0
 FEMALE_MIN_HZ = 165.0
-MIN_VOICED_FRAMES = 12
+MIN_VOICED_FRAMES = 8
 
 
 def _frame_f0_yin(frame: np.ndarray) -> float:
@@ -58,7 +64,14 @@ def _frame_f0_yin(frame: np.ndarray) -> float:
             tau_est = tau
             break
     if tau_est == 0:
-        return 0.0
+        # fallback for noisy real-world audio: take the best dip if it is at
+        # least moderately periodic. Slightly more octave-error prone than the
+        # threshold path, but the clip-level MEDIAN absorbs stray frames.
+        cand = int(np.argmin(cmnd[TAU_MIN:max_tau - 1])) + TAU_MIN
+        if cmnd[cand] < YIN_FALLBACK_MAX:
+            tau_est = cand
+        else:
+            return 0.0
     # parabolic refinement
     t = tau_est
     if 1 <= t < max_tau - 1:
@@ -87,7 +100,7 @@ def classify_gender(pcm16, sample_rate: int = SAMPLE_RATE):
     for i in range(n_frames):
         seg = audio[i * HOP:i * HOP + FRAME]
         rms[i] = np.sqrt(np.mean(seg * seg))
-    gate = max(rms.max() * 0.15, 1e-4)
+    gate = max(rms.max() * 0.08, 1e-4)
     f0s = []
     for i in range(n_frames):
         if rms[i] < gate:
