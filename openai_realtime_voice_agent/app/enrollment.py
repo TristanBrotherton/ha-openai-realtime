@@ -21,12 +21,38 @@ import time
 import wave
 from typing import Any, Awaitable, Callable, Dict, Optional, TYPE_CHECKING
 
+import httpx
+
 if TYPE_CHECKING:
     from pipecat.services.llm_service import FunctionCallParams
 
 logger = logging.getLogger(__name__)
 
 ENROLL_DIR = "/share/voice-enrollment"
+
+
+async def _set_wake_sound(on: bool) -> None:
+    """Toggle the device's wake-chime switch during enrollment (best effort).
+
+    The chime otherwise plays over the guidance every time a wake-phrase
+    repetition re-wakes the device (observed live — made instructions
+    inaudible). Entity id comes from the WAKE_SOUND_ENTITY option; empty = skip.
+    """
+    entity = os.environ.get("WAKE_SOUND_ENTITY", "").strip()
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not entity or not token:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"http://supervisor/core/api/services/switch/turn_{'on' if on else 'off'}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"entity_id": entity},
+            )
+            r.raise_for_status()
+        logger.info(f"🔔 wake sound {'restored' if on else 'muted'} ({entity})")
+    except Exception as e:
+        logger.warning(f"⚠️ could not toggle wake sound {entity}: {e!r}")
 SAMPLE_RATE = 16000
 MAX_SESSION_SECONDS = 15 * 60  # hard stop so a forgotten session can't record forever
 
@@ -100,8 +126,9 @@ ENROLLMENT_SCRIPT = (
     "through voice training. Keep YOUR replies to a few words so the recording is "
     "mostly their voice. IMPORTANT MECHANICS: they will speak in BATCHES — do not "
     "reply mid-batch; wait until they say the word 'done' (or clearly finish) before "
-    "your next prompt. If a wake chime sounds mid-session, tell them once: it is "
-    "harmless, keep going. Protocol, one batch per turn: "
+    "your next prompt. The wake chime is muted for this session; if the device "
+    "stops listening they can just say 'hey leonard' again silently re-waking it "
+    "and continue. Protocol, one batch per turn: "
     "(1) First explain the rhythm in one breath: each round, say 'hey leonard' five "
     "times in a row with a short breath between, then say 'done'. Then start round "
     "one: five NORMAL repetitions. "
@@ -192,11 +219,13 @@ def create_enrollment_tool_handler(
                     )
                     return
                 recorder.start(person)
+                await _set_wake_sound(False)
                 await params.result_callback(
                     {"status": "recording", "instructions": ENROLLMENT_SCRIPT.format(person=person)}
                 )
             elif action == "stop":
                 info = recorder.stop()
+                await _set_wake_sound(True)
                 if not info.get("path"):
                     await params.result_callback({"status": "no active enrollment session"})
                 else:
@@ -218,6 +247,7 @@ def create_enrollment_tool_handler(
             logger.error(f"❌ voice_enrollment failed: {e}", exc_info=True)
             try:
                 recorder.stop()
+                await _set_wake_sound(True)
             except Exception:
                 pass
             await params.result_callback(

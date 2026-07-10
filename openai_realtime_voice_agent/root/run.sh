@@ -4,6 +4,7 @@ set -e
 # --- 🔑 Basics ---
 OPENAI_API_KEY=$(bashio::config 'openai_api_key')
 SPEAKER_MALE_NAME=$(bashio::config 'speaker_male_name')
+WAKE_SOUND_ENTITY=$(bashio::config 'wake_sound_entity')
 SPEAKER_FEMALE_NAME=$(bashio::config 'speaker_female_name')
 MALE_ONLY_TOOLS=$(bashio::config 'male_only_tools')
 INSTRUCTIONS=$(bashio::config 'instructions')
@@ -53,6 +54,7 @@ fi
 # Export environment variables
 export OPENAI_API_KEY
 export SPEAKER_MALE_NAME
+export WAKE_SOUND_ENTITY
 export SPEAKER_FEMALE_NAME
 export MALE_ONLY_TOOLS
 export INSTRUCTIONS

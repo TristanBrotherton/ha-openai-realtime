@@ -1,5 +1,5 @@
 name: OpenAI Realtime 2 Voice Agent
-version: "0.8.4"
+version: "0.8.5"
 slug: openai_realtime_voice_agent
 description: Talk to your home with OpenAI gpt-realtime-2 — a voice agent for the Home Assistant Voice PE, with live device control and web search.
 url: https://github.com/xandervanerven/ha-openai-realtime
@@ -104,6 +104,7 @@ options:
   # names empty to disable. male_only_tools: comma-separated tool names that
   # only execute for the male voice (convenience gate, not biometric auth).
   speaker_male_name: ""
+  wake_sound_entity: ""
   speaker_female_name: ""
   male_only_tools: ""
 
@@ -150,6 +151,7 @@ schema:
   # --- 🏠 Home Assistant ---
   # --- 🗣️ Speakers (fork) ---
   speaker_male_name: str
+  wake_sound_entity: str
   speaker_female_name: str
   male_only_tools: str
   ha_mcp_url: str
