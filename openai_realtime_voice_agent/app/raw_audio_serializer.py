@@ -108,6 +108,14 @@ class RawAudioSerializer(FrameSerializer):
             except (ValueError, TypeError):
                 return None
             if isinstance(data, dict) and data.get("type") == "interrupt":
+                # During voice enrollment the stop-word model false-fires on the
+                # user's repetition batches (observed live: red flash + dropped
+                # in-flight audio 10 s into round one). Ignore interrupts while
+                # enrolling so the captured batch survives; the device-side mic
+                # close is recovered by a silent re-wake.
+                if self._enrollment_recorder is not None and self._enrollment_recorder.active:
+                    logger.info("🛑 device interrupt IGNORED (enrollment active)")
+                    return None
                 logger.info("🛑 device interrupt received")
                 if self._on_interrupt is not None:
                     try:
