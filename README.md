@@ -14,6 +14,29 @@
 > WebsocketServerTransport drops the previous client when a new one connects), so
 > today each device needs its own instance on its own port.
 
+## Fork features: speaker context + voice enrollment
+
+**Speaker context** (`speaker_male_name` / `speaker_female_name`): a pure-numpy
+pitch classifier tags each wake with the likely speaker for a one-male-one-female
+household. The verdict is injected as session context (the assistant can say
+"sir"/"ma'am" and use names) and enforces `male_only_tools` below the model.
+Honest limits: it distinguishes voice TYPES, not people — same-gender households
+should leave it off or wait for the voice-print upgrade below. Leave both names
+empty to disable entirely.
+
+**Voice enrollment** (`enrollment_phrase`, `enrollment_tts_voice`): say "teach
+me your voice" and the paired firmware enters a true enrollment mode (mic pinned
+open, wake/stop models disarmed, cyan LED, 10-minute cap, top button to abort)
+while an automated audio coach guides 25 varied wake-phrase repetitions plus
+90 s of natural speech. Recordings land in
+`/share/voice-enrollment/<name>_<timestamp>.wav` (16 kHz mono) — they are
+PERSONAL DATA, stay on your box, and the add-on never touches them beyond
+writing the file. Sessions are auto-tagged from the speaker verdict when
+available; otherwise the assistant asks for a first name (also how you enroll
+guests or same-gender households). Uses: training a custom microWakeWord model
+on real household voices, and (roadmap) per-person voice-print speaker ID,
+which replaces the pitch heuristic and works for any household composition.
+
 
 > [!IMPORTANT]
 > **This is 1 of 2 repos — you need both halves.** This repo is the **backend add-on**
