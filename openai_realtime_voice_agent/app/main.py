@@ -23,6 +23,8 @@ from app.enrollment import (
     EnrollmentConductor,
     get_enrollment_tool_definition,
     create_enrollment_tool_handler,
+    get_false_alarm_tool_definition,
+    create_false_alarm_tool_handler,
 )
 
 # Speaker context v1 (fork): set at startup when speaker names are configured.
@@ -604,6 +606,7 @@ class Application:
 
             # Voice enrollment tool (fork): guided voice-training capture.
             all_tools.append(get_enrollment_tool_definition())
+            all_tools.append(get_false_alarm_tool_definition())
 
             # Get MCP tool definitions if available
             mcp_tools_schema = None
@@ -761,6 +764,9 @@ class Application:
                 create_enrollment_tool_handler(self.enrollment_conductor, _current_speaker_name),
             )
             logger.info("✅ Registered voice_enrollment tool handler")
+            self.openai_service.register_function(
+                "mark_false_wake", create_false_alarm_tool_handler()
+            )
 
             # Register MCP tool handlers if available
             if self.mcp_client and mcp_tools_schema:

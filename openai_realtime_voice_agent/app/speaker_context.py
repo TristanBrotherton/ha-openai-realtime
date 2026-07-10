@@ -138,6 +138,16 @@ class SpeakerProbe:
                         w.setframerate(16000)
                         w.writeframes(data)
                     logger.info(f"🎙️ speaker probe capture saved: {path}")
+                    # Retention: cap the probe archive at the newest 500 files
+                    # (~50 MB) so harvesting can run indefinitely without hygiene.
+                    try:
+                        files = sorted(
+                            f for f in os.listdir(PROBE_DUMP_DIR) if f.endswith(".wav")
+                        )
+                        for stale in files[:-500]:
+                            os.remove(os.path.join(PROBE_DUMP_DIR, stale))
+                    except Exception:
+                        pass
                 except Exception as e:
                     logger.warning(f"⚠️ probe capture dump failed: {e!r}")
             label, f0, voiced = await asyncio.to_thread(classify_gender, data)

@@ -122,6 +122,45 @@ class EnrollmentRecorder:
 
 
 
+def get_false_alarm_tool_definition() -> Dict[str, Any]:
+    return {
+        "type": "function",
+        "name": "mark_false_wake",
+        "description": (
+            "Mark the most recent wake as a FALSE trigger. Use when the user says "
+            "the device woke by mistake — e.g. 'that was a false alarm', 'nobody "
+            "called you', 'you weren't being spoken to'. Confirms in one short "
+            "sentence; no apology beyond that."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+    }
+
+
+def create_false_alarm_tool_handler() -> Callable[["FunctionCallParams"], Awaitable[None]]:
+    async def false_alarm_handler(params: "FunctionCallParams") -> None:
+        try:
+            probes_dir = "/share/voice-probes"
+            files = sorted(
+                f for f in os.listdir(probes_dir)
+                if f.startswith("probe_") and f.endswith(".wav")
+            )
+            if not files:
+                await params.result_callback({"status": "no recent wake capture found"})
+                return
+            latest = files[-1]
+            marked = latest.replace("probe_", "falsewake_", 1)
+            os.rename(os.path.join(probes_dir, latest), os.path.join(probes_dir, marked))
+            logger.info(f"🏷️ marked false wake: {marked}")
+            await params.result_callback(
+                {"status": "marked", "note": "Logged as a false trigger for retraining. Confirm briefly."}
+            )
+        except Exception as e:
+            logger.error(f"❌ mark_false_wake failed: {e}", exc_info=True)
+            await params.result_callback({"error": "could not mark it; say so briefly"})
+
+    return false_alarm_handler
+
+
 def get_enrollment_tool_definition() -> Dict[str, Any]:
     return {
         "type": "function",
