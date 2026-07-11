@@ -154,6 +154,8 @@ class RawAudioSerializer(FrameSerializer):
                 # partial utterance at the cut-off so a later wake can't complete
                 # it into a stale answer.
                 logger.info("🧽 device mic flush received")
+                if self._speaker_probe is not None:
+                    self._speaker_probe.finalize_partial()
                 if self._on_mic_flush is not None:
                     try:
                         await self._on_mic_flush()
@@ -172,6 +174,14 @@ class RawAudioSerializer(FrameSerializer):
                         await self._on_button_cancel()
                     except Exception as e:
                         logger.warning(f"⚠️ button-cancel handler failed: {e!r}")
+            elif isinstance(data, dict) and data.get("type") == "false_flag":
+                # Double-press: explicit false-wake flag, no conditions.
+                logger.info("🔘🔘 explicit false-wake flag (double-press)")
+                if self._on_button_cancel is not None:
+                    try:
+                        await self._on_button_cancel()
+                    except Exception as e:
+                        logger.warning(f"⚠️ false-flag handler failed: {e!r}")
             elif isinstance(data, dict) and data.get("type") == "enroll_stopped":
                 # Device-side enrollment exit (button / firmware safety cap).
                 logger.info("🎓 device ended enrollment")

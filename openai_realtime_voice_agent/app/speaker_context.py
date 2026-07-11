@@ -87,7 +87,7 @@ class SpeakerProbe:
             def _later():
                 if self._capturing and gen == self._capture_gen:
                     self.finalize_partial()
-            loop.call_later(9.0, _later)
+            loop.call_later(4.0, _later)
         except RuntimeError:
             pass
 
