@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 MAX_TIMERS = 10
 MAX_DURATION_S = 24 * 3600
 RING_AUTO_OFF_S = 120  # stop ringing after 2 min if nobody silences it
+ANNOUNCE_GRACE_S = 20  # spoken announcement first; ring only if unacknowledged
 
 
 async def _set_ring(on: bool) -> bool:
@@ -52,6 +53,12 @@ class TimerRegistry:
     def __init__(self):
         self._timers: Dict[int, dict] = {}
         self._next_id = 1
+        # Wired by main.py: announcer(text) speaks via the device's TTS lane;
+        # get_owner() returns the current speaker's name; last_wake() returns a
+        # monotonic timestamp of the most recent device wake (ack detection).
+        self.announcer = None
+        self.get_owner = None
+        self.last_wake = None
 
     def _prune(self):
         now = time.monotonic()
@@ -66,15 +73,42 @@ class TimerRegistry:
             await asyncio.sleep(max(0.0, t["ends"] - time.monotonic()))
         except asyncio.CancelledError:
             return
-        logger.info(f"⏰ timer {tid} ('{t['label']}') expired — ringing")
+        owner = t.get("owner") or ""
+        label = t["label"]
+        logger.info(f"⏰ timer {tid} ('{label}', owner={owner or '-'}) expired")
+        # 1. Personal spoken announcement first (much nicer than a cold ring).
+        announced = False
+        if self.announcer is not None:
+            try:
+                who = f"{owner.capitalize()}, y" if owner else "Y"
+                await self.announcer(f"{who}our {label} timer is done.")
+                announced = True
+            except Exception as e:
+                logger.warning(f"⚠️ timer announcement failed: {e!r}")
+        # 2. Grace period: any wake within it counts as acknowledged.
+        if announced:
+            t0 = time.monotonic()
+            await asyncio.sleep(ANNOUNCE_GRACE_S)
+            if self.last_wake is not None and self.last_wake() > t0:
+                logger.info(f"⏰ timer {tid} acknowledged by wake — no ring")
+                self._timers.pop(tid, None)
+                return
+            # one more nudge before the ring
+            try:
+                await self.announcer(f"{owner.capitalize() + ', y' if owner else 'Y'}our {label} timer.")
+            except Exception:
+                pass
+            await asyncio.sleep(8)
+            if self.last_wake is not None and self.last_wake() > t0:
+                self._timers.pop(tid, None)
+                return
+        # 3. Escalate to the ring (auto-off backstop unchanged).
         if await _set_ring(True):
-            # Auto-silence backstop; the button/"stop" path turns the switch
-            # off on-device well before this in normal use.
             await asyncio.sleep(RING_AUTO_OFF_S)
             await _set_ring(False)
         self._timers.pop(tid, None)
 
-    def set_timer(self, seconds: int, label: str) -> dict:
+    def set_timer(self, seconds: int, label: str, owner: str = "") -> dict:
         self._prune()
         if len(self._timers) >= MAX_TIMERS:
             return {"error": "too many timers running"}
@@ -82,6 +116,7 @@ class TimerRegistry:
         tid = self._next_id
         self._next_id += 1
         self._timers[tid] = {
+            "owner": (owner or "").strip().lower(),
             "label": label or f"timer {tid}",
             "ends": time.monotonic() + seconds,
             "wall": time.time() + seconds,
@@ -151,7 +186,13 @@ def get_timer_tool_definitions() -> list:
 def register_timer_tools(llm, registry: "TimerRegistry") -> None:
     async def _set(params: "FunctionCallParams") -> None:
         a = params.arguments or {}
-        await params.result_callback(registry.set_timer(a.get("seconds", 0), (a.get("label") or "").strip()))
+        owner = ""
+        if registry.get_owner is not None:
+            try:
+                owner = registry.get_owner() or ""
+            except Exception:
+                pass
+        await params.result_callback(registry.set_timer(a.get("seconds", 0), (a.get("label") or "").strip(), owner))
 
     async def _cancel(params: "FunctionCallParams") -> None:
         a = params.arguments or {}

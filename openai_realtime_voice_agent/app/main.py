@@ -496,6 +496,16 @@ class Application:
             tts_voice=os.environ.get("ENROLLMENT_TTS_VOICE", "fable").strip() or "fable",
         )
         self.websocket_handler.enrollment_conductor = self.enrollment_conductor
+        # Timers: personalized spoken expiry via the conductor's TTS lane,
+        # owner from the live speaker verdict, wake-ack from the serializer.
+        self.timer_registry.announcer = self.enrollment_conductor._say
+        self.timer_registry.get_owner = (
+            lambda: SPEAKER_PROBE.name_for(SPEAKER_PROBE.gate_speaker()) if SPEAKER_PROBE else None
+        )
+        self.timer_registry.last_wake = (
+            lambda: getattr(self.websocket_handler._serializer, "_last_wake_mono", 0.0)
+            if self.websocket_handler._serializer else 0.0
+        )
 
         self.websocket_transport = self.websocket_handler.create_transport()
         
