@@ -26,6 +26,7 @@ RUN apt-get update \
         build-essential \
         ffmpeg \
         libsndfile1 \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install the app and its dependencies from pyproject (PEP 517 via poetry-core).
@@ -40,6 +41,12 @@ RUN pip3 install /tmp/app_build \
 COPY app/ /app/
 
 # s6-overlay / bashio run script
+# Voice-print speaker ID: pinned speaker-embedding model (WeSpeaker CAM++
+# VoxCeleb English, ~28 MB). Baked into the image so startup needs no network.
+RUN mkdir -p /opt/voiceprint \
+    && curl -fsSL -o /opt/voiceprint/embedder.onnx \
+       https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_CAM%2B%2B.onnx
+
 COPY root/ /
 RUN chmod a+x /run.sh
 

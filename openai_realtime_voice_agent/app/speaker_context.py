@@ -24,6 +24,7 @@ import wave
 from typing import Awaitable, Callable, Optional
 
 from .speaker_gender import classify_gender
+from . import voiceprint
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,26 @@ class SpeakerProbe:
                 # no running loop (shouldn't happen in the transport path)
                 self._classifying = False
 
+    def _identify(self, data: bytes):
+        """Voice-print first (verified identity), pitch heuristic fallback.
+
+        Returns (label, name, f0_or_score, voiced_or_level)."""
+        try:
+            level, name, score = voiceprint.identify(data)
+        except Exception as e:
+            logger.warning(f"⚠️ voiceprint identify failed: {e!r}")
+            level, name, score = "unavailable", None, 0.0
+        if level == "match":
+            label = "male" if name == self.male_name else ("female" if name == self.female_name else "match")
+            return label, name, score, "voiceprint"
+        if level == "unknown":
+            return "unknown", None, score, "voiceprint"
+        if level == "uncertain":
+            return "uncertain", name, score, "voiceprint"
+        # unavailable -> pitch heuristic
+        label, f0, voiced = classify_gender(data)
+        return label, self.name_for(label), f0, "pitch"
+
     async def _classify(self, data: bytes) -> None:
         try:
             # Debug: when add-on recording is enabled, dump the raw capture so
@@ -150,14 +171,13 @@ class SpeakerProbe:
                         pass
                 except Exception as e:
                     logger.warning(f"⚠️ probe capture dump failed: {e!r}")
-            label, f0, voiced = await asyncio.to_thread(classify_gender, data)
+            label, name, metric, method = await asyncio.to_thread(self._identify, data)
             self.current_label = label
-            self.current_f0 = f0
+            self.current_f0 = metric
             self._verdict_at = time.monotonic()
-            name = self.name_for(label)
             logger.info(
-                f"🗣️ speaker probe: {label}"
-                f"{f' → {name}' if name else ''} (median_f0={f0:.0f}Hz, voiced={voiced})"
+                f"🗣️ speaker probe [{method}]: {label}"
+                f"{f' → {name}' if name else ''} (score={metric:.2f})"
             )
             if self.on_verdict is not None:
                 await self.on_verdict(label, name, f0)
@@ -169,10 +189,16 @@ class SpeakerProbe:
 
 def verdict_text(probe: "SpeakerProbe", label: str, name: Optional[str], f0: float) -> str:
     """The system-item text injected into the Realtime session."""
-    if name:
+    if label == "unknown":
         return (
-            f"[voice check] The current speaker's voice matches {name} "
-            f"({'male' if label == 'male' else 'female'} voice; heuristic, not verified). "
+            "[voice check] The current speaker's voice does not match any enrolled "
+            "household member — likely a guest. Stay neutral and courteous: no "
+            "names, no sir/ma'am, and do not reference household-specific details "
+            "unprompted."
+        )
+    if name and label in ("male", "female", "match"):
+        return (
+            f"[voice check] The current speaker's voice matches {name}. "
             f"Address them accordingly."
         )
     other = " or ".join(n for n in (probe.male_name, probe.female_name) if n)
