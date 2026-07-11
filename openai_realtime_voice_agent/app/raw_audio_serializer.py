@@ -56,6 +56,10 @@ class RawAudioSerializer(FrameSerializer):
         self._on_enroll_stopped = None
         self._last_wake_mono = 0.0
         self._on_button_cancel = None
+        # True once any reply audio has gone OUT since the last wake. A button
+        # press with no reply yet = silencing a false trigger; a press after a
+        # reply = the user's normal "I'm done" gesture (must NOT be flagged).
+        self._reply_audio_since_wake = False
 
     def set_interrupt_handler(self, handler):
         """Register the async no-arg callback fired on a device 'interrupt'."""
@@ -159,8 +163,11 @@ class RawAudioSerializer(FrameSerializer):
                 # Center button silenced an active session. Within a short
                 # window of the wake this is a human flagging a false trigger.
                 dt = time.monotonic() - self._last_wake_mono
-                logger.info(f"🔘 button cancel received ({dt:.1f}s after wake)")
-                if dt <= 12.0 and self._on_button_cancel is not None:
+                logger.info(
+                    f"🔘 button cancel received ({dt:.1f}s after wake, "
+                    f"reply_audio={self._reply_audio_since_wake})"
+                )
+                if dt <= 12.0 and not self._reply_audio_since_wake and self._on_button_cancel is not None:
                     try:
                         await self._on_button_cancel()
                     except Exception as e:
@@ -180,6 +187,7 @@ class RawAudioSerializer(FrameSerializer):
                 # from the previous turn closing late (→ garbage response).
                 logger.info("👋 device wake received")
                 self._last_wake_mono = time.monotonic()
+                self._reply_audio_since_wake = False
                 if self._speaker_probe is not None:
                     self._speaker_probe.start_capture()
                 if self._on_wake is not None:
@@ -223,6 +231,8 @@ class RawAudioSerializer(FrameSerializer):
         return frame
     
     async def serialize(self, frame: Frame) -> bytes:
+        if isinstance(frame, OutputAudioRawFrame):
+            self._reply_audio_since_wake = True
         """Serialize frame to binary message.
         
         For output audio frames, we just return the raw audio bytes.
