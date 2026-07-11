@@ -1,140 +1,78 @@
 # Voice PE Realtime — backend add-on
 
-**An OpenAI Realtime voice assistant platform for the Home Assistant Voice PE**:
-speech-to-speech with native HA control, speaker awareness (sir/ma'am, per-voice
-tool gating), and on-device guided voice enrollment for training custom wake
-words and (roadmap) per-person voice-print identity. Pairs with the
-[Voice PE Realtime firmware](https://github.com/TristanBrotherton/voicepe-realtime-firmware).
-Originally derived from upstream work credited below; now developed independently here.
+Turn a Home Assistant Voice PE into a natural speech-to-speech assistant powered
+by the OpenAI Realtime API — with instant smart-home control, speaker awareness,
+and on-device voice training. This is the **backend half**: a Home Assistant
+add-on that owns the OpenAI session and your home's tools. It pairs with the
+[Voice PE Realtime firmware](https://github.com/TristanBrotherton/voicepe-realtime-firmware),
+which turns the device into a thin audio client.
 
+## The experience
 
-# OpenAI Realtime 2 Voice Agent (Home Assistant Voice PE) (TristanBrotherton fork)
+Say your wake word and just talk. Replies are generated speech-to-speech (no
+STT→LLM→TTS chain), so tone and timing feel like conversation. Smart-home
+actions run through Home Assistant's native tools and respond instantly —
+lights, climate, media, shopping lists. A follow-up window keeps the mic open
+after each reply so conversations flow without re-waking. Say "stop" mid-reply
+and it stops.
 
-> [!NOTE]
-> Maintained fork (upstream credit: xandervanerven's ha-openai-realtime),
-> tracked so installs don't depend on upstream availability. Currently identical to
-> upstream v0.6.0. Pairs with the firmware fork
-> [TristanBrotherton/voicepe-realtime-firmware](https://github.com/TristanBrotherton/voicepe-realtime-firmware)
-> (custom wake word + volume fixes). Planned divergence: multi-device support —
-> upstream's backend accepts a single Voice PE per add-on instance (the pipecat
-> WebsocketServerTransport drops the previous client when a new one connects), so
-> today each device needs its own instance on its own port.
+- **It knows who's talking.** Configure two household names and each wake is
+  voice-identified — the assistant can say "sir" or "ma'am", use names
+  naturally, and restrict chosen tools to one speaker (enforced below the
+  model, so it can't be talked around).
+- **It learns your voices.** Say *"teach me my voice"*: the device pins its mic
+  open (cyan breathing ring), an automated audio coach walks you through 25
+  varied wake-word repetitions plus 90 seconds of natural speech, and the
+  recording lands on your box — never sent to any cloud — ready for wake-word
+  training or voice-print enrollment. Press the device button to stop anytime.
+- **It learns from its mistakes.** Every wake's opening audio is archived
+  locally (auto-pruned, newest 500). False trigger? Say *"that was a false
+  alarm"* and it labels the capture for the next wake-word retrain.
 
-## Features (this project)
+## Features
 
-- **Speaker awareness** — per-wake voice identification (sir/ma'am, names),
-  `male_only_tools` gating enforced below the model
-- **Guided voice enrollment** — "teach me my voice": firmware-held open mic,
-  automated audio coach, recordings to `/share/voice-enrollment` (local only)
-- **Failure harvesting** — every wake capture archived to `/share/voice-probes`
-  (auto-pruned to newest 500); say "that was a false alarm" to label a misfire
-  (`mark_false_wake` tool) — feeds wake-word retraining
-- **Wake-chime auto-mute** during enrollment (`wake_sound_entity`)
-- Web search, dry-butler-ready persona via `instructions`, per-device instances
-
-> Based on / inspired by [xandervanerven/ha-openai-realtime](https://github.com/xandervanerven/ha-openai-realtime)
-> and [fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime) — with thanks.
-
-## Speaker context + voice enrollment (details)
-
-**Speaker context** (`speaker_male_name` / `speaker_female_name`): a pure-numpy
-pitch classifier tags each wake with the likely speaker for a one-male-one-female
-household. The verdict is injected as session context (the assistant can say
-"sir"/"ma'am" and use names) and enforces `male_only_tools` below the model.
-Honest limits: it distinguishes voice TYPES, not people — same-gender households
-should leave it off or wait for the voice-print upgrade below. Leave both names
-empty to disable entirely.
-
-**Voice enrollment** (`enrollment_phrase`, `enrollment_tts_voice`): say "teach
-me your voice" and the paired firmware enters a true enrollment mode (mic pinned
-open, wake/stop models disarmed, cyan LED, 10-minute cap, top button to abort)
-while an automated audio coach guides 25 varied wake-phrase repetitions plus
-90 s of natural speech. Recordings land in
-`/share/voice-enrollment/<name>_<timestamp>.wav` (16 kHz mono) — they are
-PERSONAL DATA, stay on your box, and the add-on never touches them beyond
-writing the file. Sessions are auto-tagged from the speaker verdict when
-available; otherwise the assistant asks for a first name (also how you enroll
-guests or same-gender households). Uses: training a custom microWakeWord model
-on real household voices, and (roadmap) per-person voice-print speaker ID,
-which replaces the pitch heuristic and works for any household composition.
-
-
-> [!IMPORTANT]
-> **This is 1 of 2 repos — you need both halves.** This repo is the **backend add-on**
-> (the voice "brain"). It needs the custom Voice PE **firmware** to connect to it — the
-> stock Home Assistant voice pipeline won't talk to this add-on. You must set up both:
-> - 🧠 **Backend add-on** (this repo) — runs inside Home Assistant
-> - 🔌 **Device firmware** → **[TristanBrotherton/voicepe-realtime-firmware](https://github.com/TristanBrotherton/voicepe-realtime-firmware)** (flashed onto the Voice PE)
->
-> 📖 New here? The full **[INSTALL guide](https://github.com/TristanBrotherton/voicepe-realtime-firmware/blob/main/INSTALL.md)** walks through both halves, step by step.
-
-A Home Assistant **add-on** that turns a [Voice PE](https://www.home-assistant.io/voice-pe/)
-device into a low-latency voice assistant built on **OpenAI's Realtime API**
-(`gpt-realtime-2`). The device streams microphone audio to this add-on over a
-plain WebSocket; the add-on runs the Realtime speech-to-speech session and
-controls Home Assistant through the official
-**[Home Assistant MCP Server](https://www.home-assistant.io/integrations/mcp_server/)**
-integration. STT, TTS and the LLM all run in the Realtime session — there is no
-Home Assistant `voice_assistant` pipeline on the audio path.
-
-> Fork of **[fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime)**,
-> retargeted at `gpt-realtime-2`, the official HA MCP Server, optional web search,
-> and the **Voice PE thin-client firmware** (a separate repo — see below).
-
-## Repository layout
-
-- **[`openai_realtime_voice_agent/`](openai_realtime_voice_agent/)** — the Home
-  Assistant add-on (Python / [Pipecat](https://github.com/pipecat-ai/pipecat)).
-  This is the only thing you install.
-  - [`DOCS.md`](openai_realtime_voice_agent/DOCS.md) — full setup: OpenAI key, the
-    Home Assistant MCP connection, recommended settings, web search, all options.
-  - [`CHANGELOG.md`](openai_realtime_voice_agent/CHANGELOG.md) — what changed per version.
-
-The **device firmware** lives in its own repository —
-**[TristanBrotherton/voicepe-realtime-firmware](https://github.com/TristanBrotherton/voicepe-realtime-firmware)**
-(a custom `va_client` ESPHome component, specific to the Voice PE hardware).
+- OpenAI Realtime speech-to-speech (`gpt-realtime-2.1` or any model id)
+- Native Home Assistant control via the official MCP Server integration
+- Speaker awareness + speaker-gated tools (`speaker_male_name`,
+  `speaker_female_name`, `male_only_tools`)
+- Guided voice enrollment (`enrollment_phrase`, `enrollment_tts_voice`),
+  wake-chime auto-mute during sessions (`wake_sound_entity`)
+- Failure harvesting: capture archive + `mark_false_wake` voice labeling
+- Web search tool (secondary OpenAI call, configurable model)
+- Persona fully yours via `instructions` (ours is a dry British butler)
+- Production hardening: proactive session refresh before OpenAI's 60-minute
+  cap, reconnect recovery, echo/ghost-turn guards, stop-word authority,
+  turn-liveness watchdogs
 
 ## Install
 
-1. In Home Assistant, open **Settings → Add-ons → Add-on store → ⋮ → Repositories**
-   and add `https://github.com/TristanBrotherton/voicepe-realtime-backend`.
-2. Install **OpenAI Realtime 2 Voice Agent**. It ships with no prebuilt `image:`,
-   so Home Assistant builds it locally on first install (a few minutes on a Pi).
-3. Configure the add-on and flash the companion firmware — see
-   [`openai_realtime_voice_agent/DOCS.md`](openai_realtime_voice_agent/DOCS.md).
+1. Add this repository URL in **Settings → Add-ons → Add-on store → ⋮ →
+   Repositories**, then install **OpenAI Realtime Voice Agent**.
+2. Set your OpenAI API key. Install Home Assistant's **MCP Server** integration
+   and expose your entities to Assist. Leave `ha_mcp_url` empty (it uses the
+   built-in server).
+3. Flash the paired
+   [firmware](https://github.com/TristanBrotherton/voicepe-realtime-firmware)
+   on your Voice PE, pointing its `va_url` at this add-on (`ws://<ha-ip>:8080/`).
 
-(An optional GitHub Actions workflow can publish container images to ghcr.io; it
-isn't needed for a normal local-build install.)
+**Multiple devices:** the backend serves one device per instance. Run one
+add-on instance per Voice PE, each on its own `websocket_port`, each device's
+`va_url` pointing at its port.
 
-## How it works
+## Notable options
 
-```
-Voice PE (ESP32-S3)  ──WS, 16 kHz PCM up──▶   this add-on    ──▶  OpenAI Realtime API
-  va_client firmware  ◀──── 24 kHz PCM down──  (Pipecat)          (gpt-realtime-2)
-                                                   │ tools
-                                                   ▼
-                                         Home Assistant MCP Server
-```
+| Option | Purpose |
+|---|---|
+| `openai_model` / `openai_model_custom` | Realtime model (any model id via custom) |
+| `openai_voice` | TTS voice (accent is steerable via `instructions`) |
+| `follow_up_listen_seconds` | Mic-open window after replies (default 8) |
+| `wake_open_delay_ms` / `follow_up_open_delay_ms` | Echo guards; lower = snappier, riskier |
+| `playback_prebuffer_ms` | Raise (~250) if you hear start-of-reply crackle |
+| `noise_reduction` | Usually `off` — the device's XMOS already filters |
+| `mcp_tool_allowlist` | Trim the toolset for speed/cost |
 
-The device does wake-word detection and XMOS audio cleanup locally and is a thin
-client. Interrupt a reply with the **"stop"** word or the center button.
+Recordings in `/share/voice-enrollment` and `/share/voice-probes` are personal
+data: they stay on your machine and are never uploaded by this add-on.
 
-## Known limitations
-
-- **No voice timers or alarms yet** — every other Assist action (lights, switches,
-  scenes, climate) and online questions work.
-- **A brief reconnect about once an hour** (OpenAI's 60-minute session cap; the
-  add-on refreshes proactively during a quiet moment, so it rarely interrupts).
-- **Rarely, the assistant may stop itself** on a word in its own reply that sounds
-  like "stop" — just ask again.
-
-## Credits
-
-- Forked from **[fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime)**.
-- Built on **[Pipecat](https://github.com/pipecat-ai/pipecat)**.
-- Firmware thin-client design based on **[maxmaxme/home-assistant-voice-pe](https://github.com/maxmaxme/home-assistant-voice-pe)** (a fork of **[esphome/home-assistant-voice-pe](https://github.com/esphome/home-assistant-voice-pe)**, Nabu Casa / ESPHome).
-- Inspiration from **[marcinnowak79/home-assistant-voice-pe](https://github.com/marcinnowak79/home-assistant-voice-pe)** (gemini-live-proxy).
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+---
+*Based on / inspired by xandervanerven's and fjfricke's ha-openai-realtime — with thanks.*
