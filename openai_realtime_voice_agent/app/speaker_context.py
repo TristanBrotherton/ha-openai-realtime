@@ -28,7 +28,7 @@ from . import voiceprint
 
 logger = logging.getLogger(__name__)
 
-CAPTURE_SECONDS = 3.0
+CAPTURE_SECONDS = 5.0
 # Partial captures at least this long are still classified + dumped when a
 # session ends before the full window fills — short false wakes are exactly
 # the audio we want to harvest for retraining, and they were being lost.

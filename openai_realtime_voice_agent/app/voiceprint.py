@@ -85,15 +85,35 @@ def embed(pcm16: bytes) -> Optional[np.ndarray]:
     return v / n if n > 0 else None
 
 
-MIN_IDENTIFY_SECONDS = 3.0
+MIN_IDENTIFY_SECONDS = 2.5  # of VOICED audio (silence is stripped first)
+
+
+def _voiced_only(pcm16: bytes) -> bytes:
+    """Strip silence: live wake captures are mostly dead air, and silence
+    dilutes embeddings into confident garbage (observed live: a valid speaker
+    at 0.11 because 3 s of buffer held 0.85 s of speech)."""
+    a = np.frombuffer(pcm16, dtype=np.int16).astype(np.float32) / 32768.0
+    hop = SAMPLE_RATE // 20
+    n = len(a) // hop
+    if n < 2:
+        return pcm16
+    rms = np.array([np.sqrt(np.mean(a[i*hop:(i+1)*hop]**2)) for i in range(n)])
+    gate = max(rms.max() * 0.08, 1e-4)
+    idx = rms > gate
+    if not idx.any():
+        return b""
+    keep = np.concatenate([a[i*hop:(i+1)*hop] for i in range(n) if idx[i]])
+    return (keep * 32768).astype(np.int16).tobytes()
 
 
 def identify(pcm16: bytes) -> Tuple[str, Optional[str], float]:
     """Returns (level, name, score): level in {match, uncertain, unknown, unavailable}."""
-    # Short-clip embeddings are unreliable (validated: self floor 0.246 at
-    # 1.5 s vs 0.599 at 3 s) — below the guard, defer to the pitch fallback.
-    if len(pcm16) < int(MIN_IDENTIFY_SECONDS * SAMPLE_RATE * 2):
+    voiced = _voiced_only(pcm16)
+    # Guard on VOICED duration — below it, defer to the pitch fallback rather
+    # than embed unreliable audio (validated: short-clip embeddings are noisy).
+    if len(voiced) < int(MIN_IDENTIFY_SECONDS * SAMPLE_RATE * 2):
         return "unavailable", None, 0.0
+    pcm16 = voiced
     prints = _load_prints()
     v = embed(pcm16)
     if v is None or not prints:
