@@ -12,6 +12,7 @@ Timers survive OpenAI session refreshes (they live here, not in the model) but
 NOT add-on restarts — acceptable for kitchen timers; documented in DOCS.
 """
 import asyncio
+import re
 import logging
 import os
 import time
@@ -70,22 +71,34 @@ class TimerRegistry:
         if not t:
             return
         try:
-            await asyncio.sleep(max(0.0, t["ends"] - time.monotonic()))
+            # The speaker verdict often lands a few seconds AFTER set_timer's
+            # tool call (probe needs mic audio) — re-capture the owner once.
+            wait = t["ends"] - time.monotonic()
+            if not t.get("owner") and self.get_owner is not None and wait > 8:
+                await asyncio.sleep(6)
+                try:
+                    t["owner"] = (self.get_owner() or "").strip().lower()
+                except Exception:
+                    pass
+                wait = t["ends"] - time.monotonic()
+            await asyncio.sleep(max(0.0, wait))
         except asyncio.CancelledError:
             return
         owner = t.get("owner") or ""
         label = t["label"]
+        # "timer 3" default labels make clumsy sentences ("your timer 3 timer")
+        nice = "" if re.fullmatch(r"timer \d+", label) else f"{label} "
         logger.info(f"⏰ timer {tid} ('{label}', owner={owner or '-'}) expired")
-        # 1. Personal spoken announcement first (much nicer than a cold ring).
+        # 1. One personal spoken announcement (no nagging nudges).
         announced = False
         if self.announcer is not None:
             try:
                 who = f"{owner.capitalize()}, y" if owner else "Y"
-                await self.announcer(f"{who}our {label} timer is done.")
+                await self.announcer(f"{who}our {nice}timer is done.")
                 announced = True
             except Exception as e:
                 logger.warning(f"⚠️ timer announcement failed: {e!r}")
-        # 2. Grace period: any wake within it counts as acknowledged.
+        # 2. Grace: any wake = acknowledged, no bell.
         if announced:
             t0 = time.monotonic()
             await asyncio.sleep(ANNOUNCE_GRACE_S)
@@ -93,16 +106,8 @@ class TimerRegistry:
                 logger.info(f"⏰ timer {tid} acknowledged by wake — no ring")
                 self._timers.pop(tid, None)
                 return
-            # one more nudge before the ring
-            try:
-                await self.announcer(f"{owner.capitalize() + ', y' if owner else 'Y'}our {label} timer.")
-            except Exception:
-                pass
-            await asyncio.sleep(8)
-            if self.last_wake is not None and self.last_wake() > t0:
-                self._timers.pop(tid, None)
-                return
-        # 3. Escalate to the ring (auto-off backstop unchanged).
+        # 3. The gentle bell (auto-off backstop unchanged).
+        logger.info(f"⏰ timer {tid} escalating to ring")
         if await _set_ring(True):
             await asyncio.sleep(RING_AUTO_OFF_S)
             await _set_ring(False)
