@@ -85,8 +85,15 @@ def embed(pcm16: bytes) -> Optional[np.ndarray]:
     return v / n if n > 0 else None
 
 
+MIN_IDENTIFY_SECONDS = 3.0
+
+
 def identify(pcm16: bytes) -> Tuple[str, Optional[str], float]:
     """Returns (level, name, score): level in {match, uncertain, unknown, unavailable}."""
+    # Short-clip embeddings are unreliable (validated: self floor 0.246 at
+    # 1.5 s vs 0.599 at 3 s) — below the guard, defer to the pitch fallback.
+    if len(pcm16) < int(MIN_IDENTIFY_SECONDS * SAMPLE_RATE * 2):
+        return "unavailable", None, 0.0
     prints = _load_prints()
     v = embed(pcm16)
     if v is None or not prints:

@@ -43,9 +43,11 @@ COPY app/ /app/
 # s6-overlay / bashio run script
 # Voice-print speaker ID: pinned speaker-embedding model (WeSpeaker CAM++
 # VoxCeleb English, ~28 MB). Baked into the image so startup needs no network.
+# TitaNet-L: validated on this household's far-field XMOS audio (100% self,
+# zero cross-matches at 3s) where WeSpeaker/VoxCeleb-domain models failed.
 RUN mkdir -p /opt/voiceprint \
     && curl -fsSL -o /opt/voiceprint/embedder.onnx \
-       https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_CAM%2B%2B.onnx
+       https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_large.onnx
 
 COPY root/ /
 RUN chmod a+x /run.sh
