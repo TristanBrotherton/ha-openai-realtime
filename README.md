@@ -202,6 +202,10 @@ data: they stay on your machine and are never uploaded by this add-on.
 - **Voice-print identity** — per-person speaker ID (TitaNet embeddings, enrolled
   centroids in `/share/voice-prints`, ≥3 s duration guard, pitch fallback);
   guests classify as unknown and get neutral handling
+- **Voice-instructed memory** — "remember that the bins go out Thursday" /
+  "from now on use Celsius" become standing instructions (speaker-attributed,
+  household-only, stored locally, active from the next session); "forget..."
+  and "what do you remember" manage them
 - **Three ways to label a false wake**: say "that was a false alarm",
   double-press the device button, or silence a wake that never spoke (auto)
 
