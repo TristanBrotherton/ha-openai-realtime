@@ -94,8 +94,11 @@ your own) and ask for a light. If tools are missing, re-check step 2; a
 401/403 in the log means set `longlived_token` (HA profile → Security).
 
 ### 5. Make it yours
-- **Persona** — rewrite `instructions`. Accent included: the voice follows
-  instructions ("speak with a natural British accent").
+- **Persona** — rewrite `instructions`. The base *timbre* is fixed (you choose
+  one of OpenAI's voices via `openai_voice`; no custom/cloned voices), but the
+  model steers accent, delivery, attitude and pacing within it — e.g. ours is
+  `ballad` instructed into understated Received Pronunciation. Character comes
+  from instructions; the voice itself comes from the list.
 - **Speakers** — set `speaker_male_name` / `speaker_female_name` for a
   one-male-one-female household: sir/ma'am, names, and `male_only_tools`
   gating. For verified per-person identity, enroll voices (next step) and
