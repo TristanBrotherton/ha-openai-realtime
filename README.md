@@ -123,7 +123,45 @@ this add-on as a [local add-on](https://developers.home-assistant.io/docs/add-on
 in its config.yaml), give it a different `websocket_port` (e.g. 8082 — avoid
 8081), and point the second device's `va_url` at that port.
 
-### Troubleshooting quick hits
+### FAQ (from the community)
+
+**What does it cost to run?** Usage-based OpenAI Realtime pricing — you pay per
+audio token only while actually conversing (wake-word detection is on-device
+and free; idle sessions cost nothing meaningful). A busy household day of a
+few dozen short exchanges typically lands in the tens of cents; check your
+OpenAI usage dashboard after a normal day for your own number. `max_context_messages`
+caps per-reply history cost; trimming `mcp_tool_allowlist` reduces per-session
+overhead.
+
+**Privacy — what leaves my network?** Wake-word detection runs on the device;
+nothing streams anywhere until a wake fires. After a wake, mic audio goes to
+OpenAI's Realtime API for the conversation (that's the product), and web
+search queries go to OpenAI when used. Everything else stays home: enrollment
+recordings, wake captures, voice prints, and speaker identity never leave your
+machine — identification runs locally in the add-on.
+
+**Will it work on a Raspberry Pi?** The *backend* yes — it's I/O-bound, and a
+Pi 4/5 running HAOS handles it (speaker-ID inference is a few hundred ms on
+CPU, off the audio path). The *firmware* is Voice PE-only — it drives that
+device's XMOS mic array and audio chain; other satellites aren't supported.
+Wake-word *training* is the one heavy job, and it runs on any spare
+Apple-Silicon/NVIDIA machine, optionally, occasionally.
+
+**Which wake word do new installs get?** The stock "hey jarvis" model.
+Training your own (any phrase, your voices) is the flywheel described in the
+firmware README; our `hey_leonard` model in the firmware repo is the worked
+example, not the default.
+
+**Other languages?** The Realtime model is multilingual — set
+`transcription_language` and write your `instructions` in your language. The
+included enrollment coach prompts are English (PRs welcome).
+
+**Does it need HAOS?** The add-on assumes HAOS/Supervised (local add-ons,
+supervisor APIs for tools/sensors/timers). Container/Core installs would need
+to run the backend manually and lose the supervisor integrations — not a
+supported path today.
+
+## Troubleshooting quick hits
 - Crackle at reply start → raise `playback_prebuffer_ms` to ~250
 - It answers itself / ghost turns → raise `wake_open_delay_ms` / `follow_up_open_delay_ms`
 - Mishears in noise → try `noise_reduction: far_field` (default off; the
