@@ -74,5 +74,15 @@ add-on instance per Voice PE, each on its own `websocket_port`, each device's
 Recordings in `/share/voice-enrollment` and `/share/voice-probes` are personal
 data: they stay on your machine and are never uploaded by this add-on.
 
+## Also included
+
+- **Voice timers** — set/cancel/list by voice; the device rings via its exposed
+  `timer_ringing` switch (`timer_ring_entity` option), silenced by button or "stop"
+- **Voice-print identity** — per-person speaker ID (TitaNet embeddings, enrolled
+  centroids in `/share/voice-prints`, ≥3 s duration guard, pitch fallback);
+  guests classify as unknown and get neutral handling
+- **Three ways to label a false wake**: say "that was a false alarm",
+  double-press the device button, or silence a wake that never spoke (auto)
+
 ---
 *Based on / inspired by xandervanerven's and fjfricke's ha-openai-realtime — with thanks.*
