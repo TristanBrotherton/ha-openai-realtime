@@ -81,11 +81,23 @@ automatically.
 ### 3. Flash the firmware
 In ESPHome Device Builder create a new device; replace its yaml with
 [`esphome-builder.dhcp.yaml`](https://github.com/TristanBrotherton/voicepe-realtime-firmware/blob/main/esphome-builder.dhcp.yaml)
-from the firmware repo. Set the substitutions: your Wi-Fi credentials, an
-`api_key`/`ota_password` (generate fresh ones), and `va_url` =
-`ws://<your-HA-IP>:8080/`. A factory-fresh Voice PE accepts the first flash
-wirelessly; after that everything is OTA. Keep the device `name` stable if
-you're re-flashing an already-adopted device.
+from the firmware repo. Set the substitutions:
+- Wi-Fi credentials for your network.
+- `api_key` — an **ESPHome Noise encryption key** (NOT a Home Assistant token,
+  NOT your OpenAI key): 32 random bytes, base64. Generate one with
+  `openssl rand -base64 32` or the ESPHome docs' key generator.
+- `ota_password` — any password you choose; it protects future OTA flashes.
+- `va_url` = `ws://<your-HA-IP>:8080/`.
+
+A factory-fresh Voice PE accepts the first flash wirelessly; after that
+everything is OTA. Keep the device `name` stable if you're re-flashing an
+already-adopted device.
+
+**Going back to stock**: fully reversible — open the official
+[Voice PE web installer](https://esphome.io/projects/?type=voice) in Chrome/Edge
+with the device on USB (or use "Install" on the stock firmware in ESPHome
+Builder) and it reflashes the factory firmware; re-adopt it in Home Assistant
+as normal.
 
 ### 4. First conversation
 Start the add-on and watch its log for `device (re)connected`. Say the wake
