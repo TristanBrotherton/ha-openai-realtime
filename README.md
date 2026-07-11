@@ -20,7 +20,22 @@ Originally derived from upstream work credited below; now developed independentl
 > WebsocketServerTransport drops the previous client when a new one connects), so
 > today each device needs its own instance on its own port.
 
-## Fork features: speaker context + voice enrollment
+## Features (this project)
+
+- **Speaker awareness** — per-wake voice identification (sir/ma'am, names),
+  `male_only_tools` gating enforced below the model
+- **Guided voice enrollment** — "teach me my voice": firmware-held open mic,
+  automated audio coach, recordings to `/share/voice-enrollment` (local only)
+- **Failure harvesting** — every wake capture archived to `/share/voice-probes`
+  (auto-pruned to newest 500); say "that was a false alarm" to label a misfire
+  (`mark_false_wake` tool) — feeds wake-word retraining
+- **Wake-chime auto-mute** during enrollment (`wake_sound_entity`)
+- Web search, dry-butler-ready persona via `instructions`, per-device instances
+
+> Based on / inspired by [xandervanerven/ha-openai-realtime](https://github.com/xandervanerven/ha-openai-realtime)
+> and [fjfricke/ha-openai-realtime](https://github.com/fjfricke/ha-openai-realtime) — with thanks.
+
+## Speaker context + voice enrollment (details)
 
 **Speaker context** (`speaker_male_name` / `speaker_female_name`): a pure-numpy
 pitch classifier tags each wake with the likely speaker for a one-male-one-female
