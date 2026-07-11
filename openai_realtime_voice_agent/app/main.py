@@ -19,6 +19,11 @@ from app.session_manager import SessionManager
 from app.websocket_handler import WebSocketHandler
 from app.speaker_context import SpeakerProbe
 from app.timers import TimerRegistry, get_timer_tool_definitions, register_timer_tools
+from app.voice_memory import (
+    memory_instructions,
+    get_memory_tool_definitions,
+    register_memory_tools,
+)
 from app.enrollment import (
     EnrollmentRecorder,
     EnrollmentConductor,
@@ -636,6 +641,7 @@ class Application:
             all_tools.append(get_enrollment_tool_definition())
             all_tools.append(get_false_alarm_tool_definition())
             all_tools.extend(get_timer_tool_definitions())
+            all_tools.extend(get_memory_tool_definitions())
 
             # Get MCP tool definitions if available
             mcp_tools_schema = None
@@ -726,7 +732,9 @@ class Application:
             )
 
             session_properties = SessionProperties(
-                instructions=self.instructions,
+                # Voice-instructed memory: standing household notes are folded
+                # into the instructions at every session creation.
+                instructions=self.instructions + memory_instructions(),
                 # Cap the reply length: bounds runaway monologues + per-response
                 # output-token cost. None = unlimited (the API default "inf").
                 max_output_tokens=self.max_output_tokens,
@@ -797,7 +805,8 @@ class Application:
                 "mark_false_wake", create_false_alarm_tool_handler()
             )
             register_timer_tools(self.openai_service, self.timer_registry)
-            logger.info("✅ Registered timer tools (set/cancel/list)")
+            register_memory_tools(self.openai_service, _current_speaker_name)
+            logger.info("✅ Registered timer + memory tools")
 
             # Register MCP tool handlers if available
             if self.mcp_client and mcp_tools_schema:
