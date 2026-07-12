@@ -28,16 +28,28 @@ box.
 
 ### What does it cost?
 
-Usage-based OpenAI Realtime pricing — you pay per audio token only while actually
-conversing. Wake-word detection is on-device and free; idle sessions cost nothing
-meaningful. A busy household day of a few dozen short exchanges typically lands
-in the **tens of cents**; check your OpenAI usage dashboard after a normal day
-for your own number.
+Usage-based OpenAI Realtime pricing — you pay per token only when a response is
+generated. Wake-word detection is on-device and free; idle sessions and
+connects cost nothing. Measured on a real install (gpt-realtime-2.1, 41 tools,
+July 2026):
 
-Cost levers: `max_context_messages` caps per-reply history cost, a trimmed
-`mcp_tool_allowlist` reduces per-session overhead, `gpt-realtime-mini` is a
-cheaper model, and each web search is a few cents (mini/nano search models are
-cheaper still).
+| Turn | Cost |
+|---|---|
+| First turn of a session (instruction+tool prefix uncached) | ~$0.019 |
+| Every later turn in the session (prefix cached at ~99% off) | ~$0.003–0.013 |
+
+The per-turn spread is mostly **output audio** ($64/1M tokens — the priciest
+meter): a one-word reply is ~$0.003, a long spoken answer several cents. Input
+speech is nearly free (~10 audio tokens/second ≈ $0.0003/s). A busy day of a
+few dozen exchanges lands around **$0.30–0.60**; check
+`sensor.voicepe_<instance>_openai_cost_today` (built-in, per-response accounting
+from the API's own usage reports) or your OpenAI dashboard for your number.
+
+Cost levers, in measured order of impact: cap `max_output_tokens` (~1200 bounds
+runaway monologues, normal replies unaffected); `gpt-realtime-mini` (~⅓ the
+price, noticeable quality drop in tool routing); a trimmed `mcp_tool_allowlist`
+(shrinks the uncached first-turn prefix — worth ~$1/month at typical usage, so
+do it for latency, not money); each web search adds a few cents.
 
 ### What about privacy — what leaves my network?
 

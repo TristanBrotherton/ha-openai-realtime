@@ -2,6 +2,16 @@
 
 All notable changes to this add-on. Newest first.
 
+## 0.16.4 (fork)
+
+- **Cost observability**: every response's exact token usage (from the API's
+  `response.done`) is logged with an estimated cost, and a
+  `sensor.voicepe_<instance>_openai_cost_today` sensor tracks daily spend in
+  Home Assistant. Rates auto-switch for mini models.
+- Recommended default applied to our install: `max_output_tokens: 1200` —
+  output audio is the dominant per-turn meter ($64/1M tokens, measured); a cap
+  bounds runaway monologues without touching normal replies.
+
 ## 0.16.3 (fork)
 
 - Documentation overhaul: marketing README, `docs/` (getting started,

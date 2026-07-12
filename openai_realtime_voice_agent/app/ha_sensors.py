@@ -56,6 +56,22 @@ class SensorPublisher:
             "at": time.strftime("%H:%M:%S"),
         })
 
+    async def usage(self, cost: float, detail: dict):
+        """Accumulate estimated OpenAI spend and publish it as a sensor."""
+        self._roll()
+        self._cost_today = getattr(self, "_cost_today", 0.0)
+        self._responses_today = getattr(self, "_responses_today", 0)
+        if getattr(self, "_cost_day", self._day) != self._day:
+            self._cost_today, self._responses_today = 0.0, 0
+        self._cost_day = self._day
+        self._cost_today += cost
+        self._responses_today += 1
+        await _post(f"sensor.voicepe_{_INST}_openai_cost_today", round(self._cost_today, 4), {
+            "friendly_name": f"Voice PE {_INST} OpenAI cost today",
+            "unit_of_measurement": "$", "responses_today": self._responses_today,
+            "last_response_cost": round(cost, 5), **detail,
+        })
+
     async def wake(self):
         self._roll(); self._wakes += 1
         await _post(f"sensor.voicepe_{_INST}_wakes_today", self._wakes,

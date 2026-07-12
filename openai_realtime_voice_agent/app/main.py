@@ -106,6 +106,45 @@ class SafeRealtimeLLMService(OpenAIRealtimeLLMService):
     async def _truncate_current_audio_response(self):  # type: ignore[override]
         return
 
+    # Per-response cost accounting (fork). The API reports exact token usage in
+    # every response.done; pipecat only pushes it as metrics frames. Log the
+    # breakdown + estimated $ (measured 2026-07-12: warm turn ≈ $0.003-0.013,
+    # cold session-first turn ≈ $0.019 — the 4.4k-token instruction+tool prefix
+    # uncached) and publish a daily cost sensor to HA.
+    _RATES = (  # $/1M tokens: (text_in, text_out, audio_in, audio_out, cached)
+        (0.60, 2.40, 10.0, 20.0, 0.06)
+        if "mini" in (os.environ.get("OPENAI_MODEL_CUSTOM") or os.environ.get("OPENAI_MODEL") or "")
+        else (4.0, 24.0, 32.0, 64.0, 0.40)
+    )
+
+    async def _handle_evt_response_done(self, evt):  # type: ignore[override]
+        try:
+            u = evt.response.usage
+            itd = getattr(u, "input_token_details", None)
+            otd = getattr(u, "output_token_details", None)
+            ctd = getattr(itd, "cached_tokens_details", None)
+            in_text = getattr(itd, "text_tokens", 0) or 0
+            in_audio = getattr(itd, "audio_tokens", 0) or 0
+            cached = getattr(itd, "cached_tokens", 0) or 0
+            c_text = getattr(ctd, "text_tokens", 0) or 0
+            c_audio = getattr(ctd, "audio_tokens", 0) or 0
+            out_text = getattr(otd, "text_tokens", 0) or 0
+            out_audio = getattr(otd, "audio_tokens", 0) or 0
+            ti, to, ai, ao, ca = self._RATES
+            cost = (max(0, in_text - c_text) * ti + max(0, in_audio - c_audio) * ai
+                    + cached * ca + out_text * to + out_audio * ao) / 1e6
+            logger.info(
+                f"💰 usage: in {in_text}txt+{in_audio}aud (cached {cached}) "
+                f"out {out_text}txt+{out_audio}aud ≈ ${cost:.4f}"
+            )
+            from .ha_sensors import PUBLISHER
+            asyncio.get_running_loop().create_task(PUBLISHER.usage(cost, {
+                "in_text": in_text, "in_audio": in_audio, "cached": cached,
+                "out_text": out_text, "out_audio": out_audio}))
+        except Exception as e:
+            logger.debug(f"usage accounting failed: {e!r}")
+        await super()._handle_evt_response_done(evt)
+
     async def reset_conversation(self):  # type: ignore[override]
         """Reconnect WITHOUT forcing a response on the reconnected session.
 

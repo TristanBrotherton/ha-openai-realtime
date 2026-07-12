@@ -291,6 +291,7 @@ for dashboards and automations:
 | `sensor.voicepe_kitchen_active_timers` | count of running timers, with next-expiry attributes |
 | `sensor.voicepe_kitchen_wakes_today` | wakes since midnight |
 | `sensor.voicepe_kitchen_false_wakes_today` | flagged false wakes since midnight |
+| `sensor.voicepe_kitchen_openai_cost_today` | estimated OpenAI spend today ($, per-response accounting) |
 | `binary_sensor.voicepe_kitchen_enrollment_active` | an enrollment session is running |
 
 The firmware separately exposes the device **phase** as a text sensor
