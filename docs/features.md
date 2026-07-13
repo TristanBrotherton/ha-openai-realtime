@@ -77,23 +77,39 @@ enrolled per-person centroids (stored in `/share/voice-prints/<name>.json`), wit
 a ≥3 s duration guard and the pitch heuristic as fallback. Guests classify as
 *unknown* and get neutral handling.
 
-To enroll a voice print:
+To enroll a voice print — two steps:
 
 1. **Say "train my voice"** (or "teach me my voice" — any similar phrasing). The
    device enters a true enrollment mode: mic pinned open, wake/stop detection
    disarmed, **cyan breathing LED**, a 10-minute hard cap, and the center button as
    a physical escape. An automated audio coach walks you through **25 varied
    repetitions** of the `enrollment_phrase` plus **90 seconds of natural speech**.
-2. The recording lands in `/share/voice-enrollment/<name>_<timestamp>.wav`
-   (16 kHz mono PCM) on your HA box. **OpenAI hears nothing during enrollment** —
-   mic audio flows only to the recorder. No cost, nothing uploaded.
-3. Build the centroid from inside the add-on container:
+   When the session completes, **the voice print builds automatically** and the
+   coach confirms out loud: *"Your voice print is ready."* (If there wasn't
+   enough clear speech, it says so and you just run the session again.)
+2. **Put the same name in the add-on configuration** — recognition is inactive
+   until the enrolled name appears here:
 
-   ```
-   python3 -m app.build_voiceprint <name> <recording.wav>
+   ```yaml
+   speaker_male_name: "Alex"
+   speaker_female_name: "Sam"
    ```
 
-   The result is written to `/share/voice-prints/`.
+   The coach reminds you out loud if you enrolled a name that isn't configured
+   yet. Restart the add-on after changing it.
+
+**Verify it worked** in Home Assistant: `sensor.voicepe_<instance>_voice_prints`
+shows every enrolled print and — in its `active` attribute — which ones are
+live (enrolled *and* named in the configuration). Privacy: **OpenAI hears
+nothing during enrollment** — mic audio flows only to the local recorder
+(`/share/voice-enrollment/`), and prints live in `/share/voice-prints/`.
+
+Rebuilds and multi-recording prints are still available manually from inside
+the add-on container:
+
+```
+python3 -m app.build_voiceprint <name> <recording.wav> [more.wav ...]
+```
 
 Options: `enrollment_phrase` (set it to your actual wake phrase),
 `enrollment_tts_voice` (the coach's voice), `wake_sound_entity` (auto-mutes the
@@ -292,6 +308,7 @@ for dashboards and automations:
 | `sensor.voicepe_kitchen_wakes_today` | wakes since midnight |
 | `sensor.voicepe_kitchen_false_wakes_today` | flagged false wakes since midnight |
 | `sensor.voicepe_kitchen_openai_cost_today` | estimated OpenAI spend today ($, per-response accounting) |
+| `sensor.voicepe_kitchen_voice_prints` | enrolled voice prints (attribute `active` = enrolled **and** configured) |
 | `binary_sensor.voicepe_kitchen_enrollment_active` | an enrollment session is running |
 
 The firmware separately exposes the device **phase** as a text sensor

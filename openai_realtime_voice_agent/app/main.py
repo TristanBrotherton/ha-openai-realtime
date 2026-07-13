@@ -532,6 +532,13 @@ class Application:
         elif male_only_tools:
             logger.warning("⚠️ male_only_tools set but no speaker names configured — gate inactive")
 
+        # Surface enrolled voice prints in HA from boot (not just after builds).
+        try:
+            from .ha_sensors import PUBLISHER as _PUB
+            asyncio.get_running_loop().create_task(_PUB.voice_prints())
+        except Exception:
+            pass
+
         # Voice timers: backend-owned registry, device rings via TIMER_RING_ENTITY.
         self.timer_registry = TimerRegistry()
 
@@ -547,6 +554,45 @@ class Application:
             tts_voice=os.environ.get("ENROLLMENT_TTS_VOICE", "fable").strip() or "fable",
         )
         self.websocket_handler.enrollment_conductor = self.enrollment_conductor
+
+        # Auto-build the voice print when enrollment finishes (fork, 0.16.5):
+        # recording alone used to require a manual `python3 -m app.build_voiceprint`
+        # step that most users never found — enrollments silently did nothing.
+        # Now: build in a worker thread, tell the user out loud, and warn when
+        # the enrolled name isn't in the speaker_*_name options (recognition
+        # stays inactive until it is).
+        async def _auto_build_voiceprint(info):
+            person, path = (info.get("person") or "").strip(), info.get("path")
+            if not person or not path or (info.get("seconds") or 0) < 20:
+                return
+            from .build_voiceprint import build
+            from .ha_sensors import PUBLISHER
+            try:
+                result = await asyncio.to_thread(build, person, [path])
+            except Exception as e:
+                logger.warning(f"⚠️ voice-print auto-build failed: {e!r}")
+                return
+            if not result["ok"]:
+                logger.warning(f"⚠️ voice-print for '{person}': {result['error']}")
+                await self.enrollment_conductor._say(
+                    "I couldn't build a reliable voice print from that session — "
+                    "there wasn't enough clear speech. Say 'train my voice' to try again.")
+                return
+            logger.info(f"🪪 voice print built for '{person}' ({result['chunks']} chunks) → {result['path']}")
+            known = {n.strip().lower() for n in (
+                os.environ.get("SPEAKER_MALE_NAME", ""), os.environ.get("SPEAKER_FEMALE_NAME", "")) if n.strip()}
+            if person.lower() in known:
+                await self.enrollment_conductor._say(
+                    f"Your voice print is ready, {person.capitalize()}. I'll recognize you from now on.")
+            else:
+                logger.warning(
+                    f"⚠️ '{person}' is enrolled but not in speaker_male_name/speaker_female_name — "
+                    "recognition inactive until the add-on configuration names this person")
+                await self.enrollment_conductor._say(
+                    f"Your voice print is built, {person.capitalize()} — one more step: add your name "
+                    "to the speaker settings in the add-on configuration, then restart it.")
+            await PUBLISHER.voice_prints()
+        self.enrollment_conductor.on_finished = _auto_build_voiceprint
         # Timers: personalized spoken expiry via the conductor's TTS lane,
         # owner from the live speaker verdict, wake-ack from the serializer.
         async def _guarded_say(text):

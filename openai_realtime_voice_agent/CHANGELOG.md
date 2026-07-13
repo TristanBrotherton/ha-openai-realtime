@@ -2,6 +2,17 @@
 
 All notable changes to this add-on. Newest first.
 
+## 0.16.5 (fork)
+
+- **Voice prints now build automatically** when enrollment completes — the
+  coach confirms out loud, warns when the enrolled name isn't in
+  `speaker_male_name`/`speaker_female_name` (recognition stays inactive until
+  it is), and asks for a retry when there wasn't enough clear speech.
+  Previously this required a manual `python3 -m app.build_voiceprint` step
+  that was easy to miss, leaving enrollments silently ineffective.
+- New `sensor.voicepe_<instance>_voice_prints`: enrolled prints, with an
+  `active` attribute showing which are enrolled *and* configured.
+
 ## 0.16.4 (fork)
 
 - **Cost observability**: every response's exact token usage (from the API's

@@ -16,9 +16,10 @@ import numpy as np
 from . import voiceprint
 
 
-def main():
-    name = sys.argv[1].strip().lower()
-    files = sys.argv[2:]
+def build(name: str, files: list) -> dict:
+    """Build and write the centroid; returns {"ok", "chunks", "path"|"error"}.
+    Called automatically after enrollment, and by the CLI below."""
+    name = name.strip().lower()
     vecs = []
     for path in files:
         with wave.open(path) as f:
@@ -35,14 +36,22 @@ def main():
             if v is not None:
                 vecs.append(v)
     if len(vecs) < 5:
-        print(f"ERROR: only {len(vecs)} usable chunks — need more audio")
-        sys.exit(1)
+        return {"ok": False, "chunks": len(vecs),
+                "error": f"only {len(vecs)} usable chunks — need more audio"}
     c = np.mean(vecs, axis=0)
     c = c / np.linalg.norm(c)
     os.makedirs(voiceprint.PRINTS_DIR, exist_ok=True)
     out = os.path.join(voiceprint.PRINTS_DIR, f"{name}.json")
     json.dump({"name": name, "embedding": c.tolist(), "chunks": len(vecs)}, open(out, "w"))
-    print(f"wrote {out} from {len(vecs)} chunks")
+    return {"ok": True, "chunks": len(vecs), "path": out}
+
+
+def main():
+    r = build(sys.argv[1], sys.argv[2:])
+    if not r["ok"]:
+        print("ERROR: " + r["error"])
+        sys.exit(1)
+    print(f"wrote {r['path']} from {r['chunks']} chunks")
 
 
 if __name__ == "__main__":

@@ -72,6 +72,28 @@ class SensorPublisher:
             "last_response_cost": round(cost, 5), **detail,
         })
 
+    async def voice_prints(self):
+        """Publish enrolled voice prints so users can SEE enrollment worked."""
+        import glob, json as _json
+        names = []
+        for f in sorted(glob.glob("/share/voice-prints/*.json")):
+            try:
+                d = _json.load(open(f))
+                names.append({"name": d.get("name") or os.path.basename(f)[:-5],
+                              "chunks": d.get("chunks", 0)})
+            except Exception:
+                continue
+        configured = [n for n in (os.environ.get("SPEAKER_MALE_NAME", ""),
+                                  os.environ.get("SPEAKER_FEMALE_NAME", "")) if n.strip()]
+        await _post(f"sensor.voicepe_{_INST}_voice_prints", len(names), {
+            "friendly_name": f"Voice PE {_INST} enrolled voice prints",
+            "enrolled": [n["name"] for n in names],
+            "chunks": {n["name"]: n["chunks"] for n in names},
+            "configured_names": configured,
+            "active": [n["name"] for n in names
+                       if n["name"].lower() in {c.strip().lower() for c in configured}],
+        })
+
     async def wake(self):
         self._roll(); self._wakes += 1
         await _post(f"sensor.voicepe_{_INST}_wakes_today", self._wakes,

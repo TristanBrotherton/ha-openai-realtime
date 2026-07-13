@@ -100,6 +100,23 @@ speaker recognition, enrollment, sensors. When you want those superpowers,
 with best — but the contract is agent-agnostic:
 [one URL and two POST shapes](agent-integration.md).
 
+### I trained my voice but it doesn't recognize me / never says my name
+
+Three things must line up — check `sensor.voicepe_<instance>_voice_prints`:
+
+1. The print exists (the enrollment coach says *"your voice print is ready"*
+   when it built — since 0.16.5 this is automatic; older versions needed a
+   manual build command).
+2. The **same name** is in `speaker_male_name` / `speaker_female_name` in the
+   add-on configuration (the sensor's `active` attribute shows this) — then
+   restart the add-on.
+3. If you replaced the default instructions (e.g. for another language), keep
+   the SPEAKERS section: identity arrives as a `[voice check]` system note and
+   the model only uses it if your instructions say to.
+
+Also: the check needs ~3 seconds of voiced speech, so ask "who am I?" as a
+follow-up rather than the very first words after the wake.
+
 ### It replied to the TV / a conversation it overheard — how do I stop that?
 
 The mic stays open briefly after each reply (the follow-up window, so you can
